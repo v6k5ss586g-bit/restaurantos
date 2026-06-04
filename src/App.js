@@ -27,6 +27,15 @@ const sb = {
     return r.json();
   },
 
+  async signUp(email, password) {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify({ email, password }),
+    });
+    return r.json();
+  },
+
   async signOut(token) {
     await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
       method: "POST",
@@ -321,10 +330,86 @@ function useAuth() {
   return { session, profile, loading, signIn, signOut };
 }
 
+
+// ═══════════════════════════════════════════════════════
+// REGISTER SCREEN
+// ═══════════════════════════════════════════════════════
+function RegisterScreen({ onBack }) {
+  const [form, setForm] = useState({ name: "", email: "", password: "", password2: "", role: "" });
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const handle = async () => {
+    if (!form.name || !form.email || !form.password || !form.role) { setErr("יש למלא את כל השדות"); return; }
+    if (form.password !== form.password2) { setErr("הסיסמאות אינן תואמות"); return; }
+    if (form.password.length < 6) { setErr("סיסמה חייבת להכיל לפחות 6 תווים"); return; }
+    setLoading(true); setErr("");
+    try {
+      const data = await sb.signUp(form.email, form.password);
+      if (data.error) throw new Error(data.error.message);
+      const userId = data.user?.id || data.id;
+      if (!userId) throw new Error("שגיאה ביצירת המשתמש");
+      await sb.insert("pending_staff", {
+        user_id: userId,
+        full_name: form.name,
+        email: form.email,
+        role: form.role,
+        restaurant_id: RESTAURANT_ID,
+        status: "pending",
+      }, SUPABASE_ANON_KEY);
+      setSuccess(true);
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+
+  if (success) return (
+    <div className="login-wrap">
+      <div className="login-card" style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+        <div style={{ fontSize: 20, fontWeight: 800, color: "var(--tp)", marginBottom: 8 }}>הבקשה נשלחה!</div>
+        <div style={{ fontSize: 14, color: "var(--ts)", marginBottom: 24 }}>המנהל יאשר את הגישה שלך בקרוב.</div>
+        <button className="btn btn-ghost" style={{ width: "100%", justifyContent: "center" }} onClick={onBack}>חזור להתחברות</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="login-wrap">
+      <div className="login-card">
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ width: 60, height: 60, background: "var(--acc-dim)", border: "1px solid var(--accent)", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", fontSize: 26 }}>👤</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "var(--tp)" }}>הרשמה לצוות</div>
+          <div style={{ fontSize: 13, color: "var(--ts)", marginTop: 4 }}>סניף רובן ירושלים</div>
+        </div>
+        <div className="fg"><label className="fl">שם מלא *</label><input className="fi" placeholder="שם פרטי ומשפחה" value={form.name} onChange={e => setForm(p=>({...p,name:e.target.value}))} /></div>
+        <div className="fg"><label className="fl">אימייל *</label><input className="fi" type="email" placeholder="your@email.com" value={form.email} onChange={e => setForm(p=>({...p,email:e.target.value}))} /></div>
+        <div className="fg">
+          <label className="fl">תפקיד *</label>
+          <select className="fs" value={form.role} onChange={e => setForm(p=>({...p,role:e.target.value}))}>
+            <option value="">בחר תפקיד...</option>
+            <option value="maitre_d">אחמ"ש</option>
+            <option value="kitchen_manager">מנהל מטבח</option>
+            <option value="kitchen_staff">עובד מטבח</option>
+          </select>
+        </div>
+        <div className="fg"><label className="fl">סיסמה *</label><input className="fi" type="password" placeholder="לפחות 6 תווים" value={form.password} onChange={e => setForm(p=>({...p,password:e.target.value}))} /></div>
+        <div className="fg"><label className="fl">אימות סיסמה *</label><input className="fi" type="password" placeholder="חזור על הסיסמה" value={form.password2} onChange={e => setForm(p=>({...p,password2:e.target.value}))} /></div>
+        {err && <div className="err">{err}</div>}
+        <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginBottom: 10 }} onClick={handle} disabled={loading}>
+          {loading ? <span className="spin" /> : "שלח בקשת הצטרפות"}
+        </button>
+        <button className="btn btn-ghost" style={{ width: "100%", justifyContent: "center" }} onClick={onBack}>חזור להתחברות</button>
+        <div style={{ marginTop: 12, fontSize: 12, color: "var(--tm)", textAlign: "center" }}>הבקשה תועבר לאישור המנהל</div>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════
 // LOGIN SCREEN
 // ═══════════════════════════════════════════════════════
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin, onRegister }) {
   const [email, setEmail] = useState("avner@restaurantos.co.il");
   const [pass, setPass] = useState("");
   const [loading, setLoading] = useState(false);
@@ -360,10 +445,10 @@ function LoginScreen({ onLogin }) {
           {loading ? <span className="spin" /> : "כניסה למערכת"}
         </button>
 
-        <div style={{ marginTop: 18, padding: "12px 14px", background: "var(--card)", borderRadius: "var(--r)", border: "1px solid var(--br)" }}>
-          <div style={{ fontSize: 12, color: "var(--ts)", fontWeight: 600, marginBottom: 6 }}>🔑 פרטי גישה לדוגמה</div>
-          <div style={{ fontSize: 12, color: "var(--tm)" }}>אימייל: avner@restaurantos.co.il</div>
-          <div style={{ fontSize: 12, color: "var(--tm)" }}>סיסמה: Avner2025!</div>
+        <div style={{ marginTop: 12, textAlign: "center" }}>
+          <button className="btn btn-ghost" style={{ width: "100%", justifyContent: "center", fontSize: 13 }} onClick={() => onRegister()}>
+            עובד חדש? הירשם כאן
+          </button>
         </div>
       </div>
     </div>
@@ -783,6 +868,102 @@ function MorningTasks({ closed, returns, tasks, setTasks, session, profile }) {
 
 
 // ═══════════════════════════════════════════════════════
+// STAFF APPROVAL (מנהל בלבד)
+// ═══════════════════════════════════════════════════════
+function StaffApproval({ session, profile }) {
+  const [pending, setPending] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState(null);
+
+  const loadPending = async () => {
+    setLoading(true);
+    const data = await sb.query("pending_staff", { status: "eq.pending", restaurant_id: `eq.${RESTAURANT_ID}`, select: "*" }, session.access_token);
+    if (Array.isArray(data)) setPending(data);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadPending(); }, []);
+
+  const approve = async (item) => {
+    setActing(item.id);
+    try {
+      // Create profile for the user
+      await sb.insert("profiles", {
+        id: item.user_id,
+        full_name: item.full_name,
+        role: item.role,
+        is_active: true,
+      }, session.access_token);
+      // Update pending status
+      await sb.update("pending_staff", item.id, {
+        status: "approved",
+        reviewed_by: profile.id,
+        reviewed_at: new Date().toISOString(),
+      }, session.access_token);
+      setPending(p => p.filter(x => x.id !== item.id));
+    } finally { setActing(null); }
+  };
+
+  const reject = async (item) => {
+    setActing(item.id);
+    try {
+      await sb.update("pending_staff", item.id, {
+        status: "rejected",
+        reviewed_by: profile.id,
+        reviewed_at: new Date().toISOString(),
+      }, session.access_token);
+      setPending(p => p.filter(x => x.id !== item.id));
+    } finally { setActing(null); }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">אישור עובדים</div>
+          <div className="page-sub">עובדים שנרשמו וממתינים לאישורך</div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={loadPending}>🔄 רענן</button>
+      </div>
+
+      {loading && <div className="empty"><div className="spin" style={{ width: 28, height: 28, margin: "0 auto 10px" }} /></div>}
+
+      {!loading && pending.length === 0 && (
+        <div className="card">
+          <div className="empty"><div className="empty-icon">✅</div>אין בקשות ממתינות</div>
+        </div>
+      )}
+
+      {pending.map(item => (
+        <div key={item.id} className="card" style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--tp)", marginBottom: 4 }}>{item.full_name}</div>
+              <div style={{ fontSize: 13, color: "var(--ts)", marginBottom: 4 }}>{item.email}</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span className="badge badge-info">{ROLE_LABELS[item.role]}</span>
+                <span style={{ fontSize: 12, color: "var(--tm)" }}>
+                  {new Date(item.created_at).toLocaleDateString("he-IL")} · {new Date(item.created_at).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-danger btn-sm" onClick={() => reject(item)} disabled={acting === item.id}>
+                {acting === item.id ? <span className="spin" /> : "❌ דחה"}
+              </button>
+              <button className="btn btn-success" onClick={() => approve(item)} disabled={acting === item.id}>
+                {acting === item.id ? <span className="spin" /> : "✅ אשר גישה"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════
 // MENU MANAGEMENT
 // ═══════════════════════════════════════════════════════
 function MenuManager({ menuItems, setMenuItems, session, profile }) {
@@ -944,10 +1125,15 @@ export default function App() {
     </>
   );
 
+  const [showRegister, setShowRegister] = useState(false);
+
   if (!session || !profile) return (
     <>
       <style>{css}</style>
-      <LoginScreen onLogin={signIn} />
+      {showRegister
+        ? <RegisterScreen onBack={() => setShowRegister(false)} />
+        : <LoginScreen onLogin={signIn} onRegister={() => setShowRegister(true)} />
+      }
     </>
   );
 
@@ -961,6 +1147,7 @@ export default function App() {
     { id: "returns", label: "מנות שחזרו",    icon: "↩️", badge: returnsCount || null },
     { id: "morning", label: "משימות בוקר",   icon: "☀️" },
     { id: "menu",    label: "ניהול תפריט",   icon: "📋" },
+    { id: "staff",   label: "אישור עובדים",  icon: "👥", managerOnly: true },
   ];
 
   return (
@@ -971,7 +1158,7 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
             <div className="logo">Restaurant<span>OS</span></div>
             <div className="nav-tabs">
-              {navItems.map(item => (
+              {navItems.filter(item => !item.managerOnly || profile.role === "manager").map(item => (
                 <div key={item.id} className={`nav-tab ${nav === item.id ? "active" : ""}`} onClick={() => setNav(item.id)}>
                   <span>{item.icon}</span>
                   <span className="label">{item.label}</span>
@@ -994,6 +1181,7 @@ export default function App() {
           {nav === "returns" && <Returns returns={returns} setReturns={setReturns} menuItems={menuItems} session={session} profile={profile} />}
           {nav === "morning" && <MorningTasks closed={closed} returns={returns} tasks={tasks} setTasks={setTasks} session={session} profile={profile} />}
           {nav === "menu"    && <MenuManager menuItems={menuItems} setMenuItems={setMenuItems} session={session} profile={profile} />}
+          {nav === "staff"   && <StaffApproval session={session} profile={profile} />}
         </div>
       </div>
     </>
