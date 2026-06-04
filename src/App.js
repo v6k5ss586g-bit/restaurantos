@@ -800,6 +800,44 @@ export default function App() {
 
   useEffect(()=>{ loadData(); },[loadData]);
 
+  // Real-time: reload data on any change
+  useEffect(()=>{
+    if (!session?.access_token) return;
+
+    const wsUrl = SUPABASE_URL.replace("https://","wss://") + "/realtime/v1/websocket?apikey=" + SUPABASE_ANON_KEY + "&vsn=1.0.0";
+    let ws;
+    let heartbeat;
+
+    try {
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({topic:"realtime:public:closed_dishes",event:"phx_join",payload:{},ref:"1"}));
+        ws.send(JSON.stringify({topic:"realtime:public:dish_returns",event:"phx_join",payload:{},ref:"2"}));
+        ws.send(JSON.stringify({topic:"realtime:public:pending_staff",event:"phx_join",payload:{},ref:"3"}));
+        heartbeat = setInterval(()=>{ ws.send(JSON.stringify({topic:"phoenix",event:"heartbeat",payload:{},ref:"hb"})); },30000);
+      };
+
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.event === "INSERT" || msg.event === "UPDATE" || msg.event === "DELETE") {
+          loadData();
+        }
+      };
+
+      ws.onerror = () => {};
+    } catch(e) {}
+
+    // Fallback poll every 30 seconds
+    const interval = setInterval(()=>{ loadData(); }, 30000);
+
+    return ()=>{
+      clearInterval(interval);
+      clearInterval(heartbeat);
+      if (ws) ws.close();
+    };
+  },[session, loadData]);
+
   if (loading) return (<><style>{css}</style><div className="loading-screen"><div className="spin" style={{width:36,height:36,borderWidth:3}}/><div>טוען...</div></div></>);
 
   if (!session||!profile) return (
