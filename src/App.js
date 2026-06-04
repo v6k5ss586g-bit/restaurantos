@@ -283,7 +283,7 @@ function RegisterScreen({ onBack }) {
 
 // ── LOGIN ──
 function LoginScreen({ onLogin, onRegister }) {
-  const [email, setEmail] = useState("025660240a@gmail.com");
+  const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
