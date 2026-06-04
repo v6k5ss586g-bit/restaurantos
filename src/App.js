@@ -171,7 +171,35 @@ tr:hover td{background:var(--hover)}
 .prog-fill{height:100%;border-radius:5px;transition:width .4s}
 .empty{text-align:center;padding:32px 20px;color:var(--tm);font-size:14px}
 .empty-icon{font-size:36px;margin-bottom:8px}
-@media(max-width:768px){.topbar{padding:0 12px}.page{padding:12px}.branch{display:none}}
+@media(max-width:768px){
+  .topbar{padding:0 12px;height:50px}
+  .nav-tabs{display:none}
+  .page{padding:12px;padding-bottom:80px}
+  .branch{display:none}
+  .user-name-text{display:none}
+  .g4{grid-template-columns:1fr 1fr}
+  .g2{grid-template-columns:1fr}
+}
+.bottom-nav{display:none}
+@media(max-width:768px){
+  .bottom-nav{
+    display:flex;position:fixed;bottom:0;left:0;right:0;
+    background:var(--surf);border-top:1px solid var(--br);
+    z-index:100;padding:6px 0;padding-bottom:max(6px,env(safe-area-inset-bottom))
+  }
+  .bottom-nav-item{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+    cursor:pointer;padding:4px 0;position:relative;
+    color:var(--ts);font-size:10px;font-weight:500;transition:color .2s
+  }
+  .bottom-nav-item.active{color:var(--accent)}
+  .bottom-nav-icon{font-size:22px;line-height:1}
+  .bottom-nav-badge{
+    position:absolute;top:2px;right:calc(50% - 18px);
+    background:var(--danger);color:white;
+    font-size:10px;font-weight:700;padding:1px 5px;border-radius:8px;min-width:16px;text-align:center
+  }
+}
 `;
 
 // ── AUTH ──
@@ -803,7 +831,7 @@ export default function App() {
           </div>
           <div className="user-chip">
             <div className="avatar">{initials}</div>
-            <div style={{fontSize:13,color:"var(--tp)",fontWeight:500}}>{profile.full_name}</div>
+            <div className="user-name-text" style={{fontSize:13,color:"var(--tp)",fontWeight:500}}>{profile.full_name}</div>
             <span className="badge badge-info" style={{fontSize:11,padding:"2px 8px"}}>{ROLE_LABELS[profile.role]}</span>
             <button className="btn btn-ghost btn-sm" onClick={signOut} style={{padding:"3px 10px"}}>יציאה</button>
           </div>
@@ -815,6 +843,16 @@ export default function App() {
           {nav==="morning" && <MorningTasks closed={closed} returns={returns} tasks={tasks} setTasks={setTasks} session={session} profile={profile}/>}
           {nav==="menu"    && <MenuManager menuItems={menuItems} setMenuItems={setMenuItems} session={session} profile={profile}/>}
           {nav==="staff"   && <StaffApproval session={session} profile={profile}/>}
+        </div>
+
+        <div className="bottom-nav">
+          {navItems.filter(item=>!item.managerOnly||profile.role==="manager").map(item=>(
+            <div key={item.id} className={`bottom-nav-item ${nav===item.id?"active":""}`} onClick={()=>setNav(item.id)}>
+              {item.badge && <span className="bottom-nav-badge">{item.badge}</span>}
+              <span className="bottom-nav-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </div>
+          ))}
         </div>
       </div>
     </>
