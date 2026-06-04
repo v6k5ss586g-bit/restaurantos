@@ -9,6 +9,7 @@ const SUPABASE_URL = "https://evqqxpaagsaizjrbbikn.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2cXF4cGFhZ3NhaXpqcmJiaWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1Njg3MzAsImV4cCI6MjA5NjE0NDczMH0.18AApIN7gTePCIjbRzO1TjUWLz7OlQxckqn7RoxZ2xs";
 
 const RESTAURANT_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+const BRANCH_NAME = "רובן ירושלים";
 
 // ─── Supabase client (no npm needed, raw fetch) ───────
 const sb = {
@@ -380,7 +381,7 @@ function RegisterScreen({ onBack }) {
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <div style={{ width: 60, height: 60, background: "var(--acc-dim)", border: "1px solid var(--accent)", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", fontSize: 26 }}>👤</div>
           <div style={{ fontSize: 20, fontWeight: 800, color: "var(--tp)" }}>הרשמה לצוות</div>
-          <div style={{ fontSize: 13, color: "var(--ts)", marginTop: 4 }}>סניף רובן ירושלים</div>
+          <div style={{ fontSize: 13, color: "var(--ts)", marginTop: 4 }}>סניף {BRANCH_NAME}</div>
         </div>
         <div className="fg"><label className="fl">שם מלא *</label><input className="fi" placeholder="שם פרטי ומשפחה" value={form.name} onChange={e => setForm(p=>({...p,name:e.target.value}))} /></div>
         <div className="fg"><label className="fl">אימייל *</label><input className="fi" type="email" placeholder="your@email.com" value={form.email} onChange={e => setForm(p=>({...p,email:e.target.value}))} /></div>
@@ -429,7 +430,7 @@ function LoginScreen({ onLogin, onRegister }) {
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div style={{ width: 60, height: 60, background: "var(--acc-dim)", border: "1px solid var(--accent)", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", fontSize: 26 }}>🍽️</div>
           <div style={{ fontSize: 22, fontWeight: 800, color: "var(--tp)" }}>Restaurant<span style={{ color: "var(--accent)" }}>OS</span></div>
-          <div style={{ fontSize: 13, color: "var(--ts)", marginTop: 4 }}>מערכת ניהול מסעדה</div>
+          <div style={{ fontSize: 13, color: "var(--ts)", marginTop: 4 }}>סניף {BRANCH_NAME}</div>
         </div>
 
         <div className="fg">
@@ -1156,7 +1157,7 @@ export default function App() {
       <div className="app">
         <div className="topbar">
           <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-            <div className="logo">Restaurant<span>OS</span></div>
+            <div className="logo">Restaurant<span>OS</span> <span style={{ fontSize: 13, fontWeight: 400, color: "var(--ts)", marginRight: 6 }}>| סניף {BRANCH_NAME}</span></div>
             <div className="nav-tabs">
               {navItems.filter(item => !item.managerOnly || profile.role === "manager").map(item => (
                 <div key={item.id} className={`nav-tab ${nav === item.id ? "active" : ""}`} onClick={() => setNav(item.id)}>
