@@ -232,7 +232,7 @@ function RegisterScreen({ onBack }) {
       await sb.insert("pending_staff", {
         user_id: userId, full_name: f.name, email: f.email,
         role: f.role, restaurant_id: RESTAURANT_ID, status: "pending",
-      }, null);
+      }, SUPABASE_ANON_KEY);
       setSuccess(true);
     } catch(e) { setErr(e.message); }
     finally { setLoading(false); }
