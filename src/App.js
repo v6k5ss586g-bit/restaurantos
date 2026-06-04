@@ -243,6 +243,7 @@ function useAuth() {
 // ── REGISTER ──
 function RegisterScreen({ onBack }) {
   const [f, setF] = useState({ name:"", email:"", password:"", password2:"", role:"" });
+  const [showRegPass, setShowRegPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [success, setSuccess] = useState(false);
@@ -296,8 +297,13 @@ function RegisterScreen({ onBack }) {
             <option value="kitchen_staff">עובד מטבח</option>
           </select>
         </div>
-        <div className="fg"><label className="fl">סיסמה *</label><input className="fi" type="password" placeholder="לפחות 6 תווים" value={f.password} onChange={e=>setF(p=>({...p,password:e.target.value}))} /></div>
-        <div className="fg"><label className="fl">אימות סיסמה *</label><input className="fi" type="password" placeholder="חזור על הסיסמה" value={f.password2} onChange={e=>setF(p=>({...p,password2:e.target.value}))} /></div>
+        <div className="fg"><label className="fl">סיסמה *</label>
+          <div style={{position:"relative"}}>
+            <input className="fi" type={showRegPass?"text":"password"} placeholder="לפחות 6 תווים" value={f.password} onChange={e=>setF(p=>({...p,password:e.target.value}))} style={{paddingLeft:40}}/>
+            <button onClick={()=>setShowRegPass(p=>!p)} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"var(--ts)",fontSize:16,padding:4}}>{showRegPass?"🙈":"👁️"}</button>
+          </div>
+        </div>
+        <div className="fg"><label className="fl">אימות סיסמה *</label><input className="fi" type={showRegPass?"text":"password"} placeholder="חזור על הסיסמה" value={f.password2} onChange={e=>setF(p=>({...p,password2:e.target.value}))} /></div>
         {err && <div className="err">{err}</div>}
         <button className="btn btn-primary" style={{width:"100%",justifyContent:"center",marginBottom:10}} onClick={handle} disabled={loading}>
           {loading ? <span className="spin"/> : "שלח בקשת הצטרפות"}
@@ -313,6 +319,7 @@ function RegisterScreen({ onBack }) {
 function LoginScreen({ onLogin, onRegister }) {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
@@ -333,7 +340,12 @@ function LoginScreen({ onLogin, onRegister }) {
           <div style={{fontSize:13,color:"var(--ts)",marginTop:4}}>סניף {BRANCH_NAME}</div>
         </div>
         <div className="fg"><label className="fl">אימייל</label><input className="fi" type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr("")}} /></div>
-        <div className="fg"><label className="fl">סיסמה</label><input className="fi" type="password" value={pass} onChange={e=>{setPass(e.target.value);setErr("")}} onKeyDown={e=>e.key==="Enter"&&handle()} /></div>
+        <div className="fg"><label className="fl">סיסמה</label>
+          <div style={{position:"relative"}}>
+            <input className="fi" type={showPass?"text":"password"} value={pass} onChange={e=>{setPass(e.target.value);setErr("")}} onKeyDown={e=>e.key==="Enter"&&handle()} style={{paddingLeft:40}}/>
+            <button onClick={()=>setShowPass(p=>!p)} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"var(--ts)",fontSize:16,padding:4}}>{showPass?"🙈":"👁️"}</button>
+          </div>
+        </div>
         {err && <div className="err">{err}</div>}
         <button className="btn btn-primary" style={{width:"100%",justifyContent:"center",fontSize:15,padding:"11px 0",marginBottom:10}} onClick={handle} disabled={loading}>
           {loading ? <span className="spin"/> : "כניסה למערכת"}
