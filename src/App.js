@@ -303,7 +303,7 @@ function useAuth() {
 
   const signIn = async (email, password) => {
     const data = await sb.signIn(email, password);
-    if (data.error) throw new Error(data.error.message || "שגיאת התחברות");
+    if (data.error || !data.user) throw new Error(data.error?.message || "אימייל או סיסמה שגויים");
     localStorage.setItem("ros_session", JSON.stringify(data));
     setSession(data);
     const p = await sb.getProfile(data.user.id, data.access_token);
@@ -781,6 +781,131 @@ function MorningTasks({ closed, returns, tasks, setTasks, session, profile }) {
   );
 }
 
+
+// ═══════════════════════════════════════════════════════
+// MENU MANAGEMENT
+// ═══════════════════════════════════════════════════════
+function MenuManager({ menuItems, setMenuItems, session, profile }) {
+  const [showF, setShowF] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(null);
+  const [f, setF] = useState({ name: "", category: "" });
+
+  const canEdit = ["manager", "kitchen_manager"].includes(profile?.role);
+
+  const addItem = async () => {
+    if (!f.name || !f.category) return;
+    setSaving(true);
+    const body = { restaurant_id: RESTAURANT_ID, name: f.name, category: f.category, is_active: true };
+    const res = await sb.insert("menu_items", body, session.access_token);
+    if (res?.[0]) setMenuItems(p => [...p, res[0]]);
+    setF({ name: "", category: "" });
+    setShowF(false);
+    setSaving(false);
+  };
+
+  const toggleActive = async (item) => {
+    const res = await sb.update("menu_items", item.id, { is_active: !item.is_active }, session.access_token);
+    if (res?.[0]) setMenuItems(p => p.map(m => m.id === item.id ? res[0] : m));
+  };
+
+  const deleteItem = async (id) => {
+    setDeleting(id);
+    await fetch(`${SUPABASE_URL}/rest/v1/menu_items?id=eq.${id}`, {
+      method: "DELETE",
+      headers: { ...sb.headers, Authorization: `Bearer ${session.access_token}` },
+    });
+    setMenuItems(p => p.filter(m => m.id !== id));
+    setDeleting(null);
+  };
+
+  const grouped = CATEGORIES.reduce((acc, cat) => {
+    acc[cat] = menuItems.filter(m => m.category === cat);
+    return acc;
+  }, {});
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">ניהול תפריט</div>
+          <div className="page-sub">הוסף, ערוך והסר מנות מהתפריט</div>
+        </div>
+        {canEdit && <button className="btn btn-primary" onClick={() => setShowF(true)}>+ הוסף מנה</button>}
+      </div>
+
+      {showF && (
+        <div className="modal-bg" onClick={e => e.target === e.currentTarget && setShowF(false)}>
+          <div className="modal">
+            <div className="modal-title">📋 הוספת מנה חדשה</div>
+            <div className="fg">
+              <label className="fl">שם המנה *</label>
+              <input className="fi" placeholder="למשל: טרופל בורגר" value={f.name} onChange={e => setF(p => ({ ...p, name: e.target.value }))} />
+            </div>
+            <div className="fg">
+              <label className="fl">קטגוריה *</label>
+              <select className="fs" value={f.category} onChange={e => setF(p => ({ ...p, category: e.target.value }))}>
+                <option value="">בחר קטגוריה...</option>
+                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn btn-ghost" onClick={() => setShowF(false)}>ביטול</button>
+              <button className="btn btn-primary" onClick={addItem} disabled={saving || !f.name || !f.category}>
+                {saving ? <span className="spin" /> : "הוסף מנה"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {CATEGORIES.map(cat => {
+        const items = grouped[cat] || [];
+        if (items.length === 0) return null;
+        return (
+          <div key={cat} className="card">
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <div className="card-title" style={{ margin: 0 }}>{cat}</div>
+              <span className="badge badge-neu">{items.length}</span>
+            </div>
+            {items.map(item => (
+              <div key={item.id} className="dish-item" style={{ borderRight: `3px solid ${item.is_active ? "var(--success)" : "var(--tm)"}` }}>
+                <div>
+                  <div className="dish-name" style={{ opacity: item.is_active ? 1 : 0.5 }}>{item.name}</div>
+                  <div className="dish-meta">{item.category}</div>
+                </div>
+                {canEdit && (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className={`btn btn-sm ${item.is_active ? "btn-ghost" : "btn-success"}`}
+                      onClick={() => toggleActive(item)}
+                    >
+                      {item.is_active ? "השבת" : "הפעל"}
+                    </button>
+                    <button
+                      className="btn btn-danger btn-sm"
+                      onClick={() => deleteItem(item.id)}
+                      disabled={deleting === item.id}
+                    >
+                      {deleting === item.id ? <span className="spin" /> : "מחק"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+
+      {menuItems.length === 0 && (
+        <div className="card">
+          <div className="empty"><div className="empty-icon">📋</div>אין מנות בתפריט עדיין</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════
@@ -835,6 +960,7 @@ export default function App() {
     { id: "closed",  label: "סגירת מנות",    icon: "🚫", badge: closedCount || null },
     { id: "returns", label: "מנות שחזרו",    icon: "↩️", badge: returnsCount || null },
     { id: "morning", label: "משימות בוקר",   icon: "☀️" },
+    { id: "menu",    label: "ניהול תפריט",   icon: "📋" },
   ];
 
   return (
@@ -867,6 +993,7 @@ export default function App() {
           {nav === "closed"  && <ClosedDishes closed={closed} setClosed={setClosed} menuItems={menuItems} session={session} profile={profile} />}
           {nav === "returns" && <Returns returns={returns} setReturns={setReturns} menuItems={menuItems} session={session} profile={profile} />}
           {nav === "morning" && <MorningTasks closed={closed} returns={returns} tasks={tasks} setTasks={setTasks} session={session} profile={profile} />}
+          {nav === "menu"    && <MenuManager menuItems={menuItems} setMenuItems={setMenuItems} session={session} profile={profile} />}
         </div>
       </div>
     </>
