@@ -465,8 +465,8 @@ function ClosedDishes({ closed, setClosed, menuItems, session, profile }) {
         <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowF(false)}>
           <div className="modal">
             <div className="modal-title">🚫 סגירת מנה</div>
-            <div className="fg"><label className="fl">שם המנה *</label><select className="fs" value={f.dish_name} onChange={e=>setF(p=>({...p,dish_name:e.target.value}))}><option value="">בחר מנה...</option>{dishOptions.map(m=><option key={m}>{m}</option>)}</select></div>
-            <div className="fg"><label className="fl">קטגוריה *</label><select className="fs" value={f.category} onChange={e=>setF(p=>({...p,category:e.target.value}))}><option value="">בחר קטגוריה...</option>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></div>
+            <div className="fg"><label className="fl">קטגוריה *</label><select className="fs" value={f.category} onChange={e=>setF(p=>({...p,category:e.target.value,dish_name:""}))}><option value="">בחר קטגוריה...</option>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></div>
+            <div className="fg"><label className="fl">שם המנה *</label><select className="fs" value={f.dish_name} onChange={e=>setF(p=>({...p,dish_name:e.target.value}))} disabled={!f.category}><option value="">{f.category?"בחר מנה...":"קודם בחר קטגוריה"}</option>{dishOptions.map(m=><option key={m}>{m}</option>)}</select></div>
             <div className="fg"><label className="fl">סיבת הסגירה *</label><select className="fs" value={f.reason} onChange={e=>setF(p=>({...p,reason:e.target.value}))}><option value="">בחר סיבה...</option>{CLOSE_R.map(r=><option key={r}>{r}</option>)}</select></div>
             <div className="fg"><label className="fl">הערות</label><textarea className="fta" value={f.notes} onChange={e=>setF(p=>({...p,notes:e.target.value}))} placeholder="פרט..."/></div>
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
@@ -546,7 +546,8 @@ function Returns({ returns, setReturns, menuItems, session, profile }) {
         <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowF(false)}>
           <div className="modal">
             <div className="modal-title">↩️ דיווח החזרת מנה</div>
-            <div className="fg"><label className="fl">שם המנה *</label><select className="fs" value={f.dish_name} onChange={e=>setF(p=>({...p,dish_name:e.target.value}))}><option value="">בחר מנה...</option>{dishOptions.map(m=><option key={m}>{m}</option>)}</select></div>
+            <div className="fg"><label className="fl">קטגוריה</label><select className="fs" value={retCategory} onChange={e=>{setRetCategory(e.target.value);setF(p=>({...p,dish_name:""}));}}><option value="">בחר קטגוריה...</option>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></div>
+            <div className="fg"><label className="fl">שם המנה *</label><select className="fs" value={f.dish_name} onChange={e=>setF(p=>({...p,dish_name:e.target.value}))} disabled={!retCategory}><option value="">{retCategory?"בחר מנה...":"קודם בחר קטגוריה"}</option>{dishOptions.map(m=><option key={m}>{m}</option>)}</select></div>
             <div className="g2c" style={{marginBottom:14}}>
               <div><label className="fl">שולחן *</label><input className="fi" type="number" placeholder="7" value={f.table_number} onChange={e=>setF(p=>({...p,table_number:e.target.value}))}/></div>
               <div><label className="fl">מדווח</label><input className="fi" value={profile?.full_name||""} readOnly style={{opacity:.6}}/></div>
