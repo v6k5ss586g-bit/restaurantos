@@ -297,7 +297,7 @@ function RegisterScreen({ onBack }) {
     <div className="login-wrap">
       <div className="login-card">
         <div style={{textAlign:"center",marginBottom:24}}>
-          <div style={{width:60,height:60,background:"var(--acc-dim)",border:"1px solid var(--accent)",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",fontSize:26}}></div>
+          
           <div style={{fontSize:20,fontWeight:800,color:"var(--tp)"}}>הרשמה לצוות</div>
           <div style={{fontSize:13,color:"var(--ts)",marginTop:4}}>סניף {BRANCH_NAME}</div>
         </div>
@@ -350,7 +350,7 @@ function LoginScreen({ onLogin, onRegister }) {
     <div className="login-wrap">
       <div className="login-card">
         <div style={{textAlign:"center",marginBottom:28}}>
-          <div style={{width:60,height:60,background:"var(--acc-dim)",border:"1px solid var(--accent)",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",fontSize:26}}></div>
+          
           <div style={{fontSize:28,fontWeight:100,color:"var(--accent)",letterSpacing:-1}}>FLOW<span style={{display:"inline-block",width:5,height:5,borderRadius:"50%",background:"var(--accent)",margin:"0 6px 4px",verticalAlign:"middle"}}></span><span style={{fontWeight:900,color:"white"}}>OS</span></div>
           <div style={{fontSize:13,color:"var(--ts)",marginTop:4}}>סניף {BRANCH_NAME}</div>
         </div>
