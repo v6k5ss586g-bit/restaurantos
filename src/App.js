@@ -1058,64 +1058,214 @@ function StaffManager({ session, profile }) {
   );
 }
 
-// ── STAFF APPROVAL ──
-function StaffApproval({ session, profile }) {
+// ── STAFF APPROVAL + MANAGER ──
+function StaffHub({ session, profile }) {
+  const [tab, setTab] = useState("staff");
+  const [staff, setStaff] = useState([]);
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [showReset, setShowReset] = useState(false);
+  const [showRole, setShowRole] = useState(false);
+  const [newPass, setNewPass] = useState("");
+  const [newRole, setNewRole] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
 
-  const load = async () => {
+  const loadAll = async () => {
     setLoading(true);
-    const data = await sb.query("pending_staff",{status:"eq.pending",restaurant_id:`eq.${RESTAURANT_ID}`,select:"*"},session.access_token);
-    if (Array.isArray(data)) setPending(data);
+    const [s, p] = await Promise.all([
+      sb.query("profiles", { select: "*" }, session.access_token),
+      sb.query("pending_staff", { status: "eq.pending", restaurant_id: `eq.${RESTAURANT_ID}`, select: "*" }, session.access_token),
+    ]);
+    if (Array.isArray(s)) setStaff(s);
+    if (Array.isArray(p)) setPending(p);
     setLoading(false);
   };
 
-  useEffect(()=>{load();},[]);
+  useEffect(() => { loadAll(); }, []);
 
   const approve = async (item) => {
     setActing(item.id);
     try {
-      await sb.insert("profiles",{id:item.user_id,full_name:item.full_name,role:item.role,is_active:true},session.access_token);
-      await sb.update("pending_staff",item.id,{status:"approved",reviewed_by:profile.id,reviewed_at:new Date().toISOString()},session.access_token);
-      setPending(p=>p.filter(x=>x.id!==item.id));
+      await sb.insert("profiles", { id: item.user_id, full_name: item.full_name, role: item.role, is_active: true }, session.access_token);
+      await sb.update("pending_staff", item.id, { status: "approved", reviewed_by: profile.id, reviewed_at: new Date().toISOString() }, session.access_token);
+      setPending(p => p.filter(x => x.id !== item.id));
+      loadAll();
     } finally { setActing(null); }
   };
 
   const reject = async (item) => {
     setActing(item.id);
     try {
-      await sb.update("pending_staff",item.id,{status:"rejected",reviewed_by:profile.id,reviewed_at:new Date().toISOString()},session.access_token);
-      setPending(p=>p.filter(x=>x.id!==item.id));
+      await sb.update("pending_staff", item.id, { status: "rejected", reviewed_by: profile.id, reviewed_at: new Date().toISOString() }, session.access_token);
+      setPending(p => p.filter(x => x.id !== item.id));
     } finally { setActing(null); }
   };
+
+  const resetPassword = async () => {
+    if (!newPass || newPass.length < 6) return;
+    setSaving(true);
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_reset_password`, {
+        method: "POST",
+        headers: { ...sb.h(session.access_token), "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: selected.id, new_password: newPass }),
+      });
+      setShowReset(false); setNewPass("");
+    } finally { setSaving(false); }
+  };
+
+  const changeRole = async () => {
+    if (!newRole) return;
+    setSaving(true);
+    const res = await sb.update("profiles", selected.id, { role: newRole }, session.access_token);
+    if (res?.[0]) setStaff(p => p.map(s => s.id === selected.id ? res[0] : s));
+    setShowRole(false); setNewRole(""); setSaving(false);
+  };
+
+  const toggleActive = async (member) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_toggle_user`, {
+      method: "POST",
+      headers: { ...sb.h(session.access_token), "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: member.id, is_active: !member.is_active }),
+    });
+    setStaff(p => p.map(s => s.id === member.id ? { ...s, is_active: !s.is_active } : s));
+  };
+
+  const deleteStaff = async (member) => {
+    if (!window.confirm(`למחוק את ${member.full_name}?`)) return;
+    await sb.delete("profiles", member.id, session.access_token);
+    setStaff(p => p.filter(s => s.id !== member.id));
+  };
+
+  const roleColors = { manager: "badge-danger", maitre_d: "badge-info", kitchen_manager: "badge-warn", kitchen_staff: "badge-neu" };
+  const filtered = staff.filter(s => s.full_name?.includes(search));
 
   return (
     <div>
       <div className="page-header">
-        <div><div className="page-title">אישור עובדים</div><div className="page-sub">עובדים שנרשמו וממתינים לאישורך</div></div>
-        <button className="btn btn-ghost btn-sm" onClick={load}>🔄 רענן</button>
+        <div>
+          <div className="page-title">ניהול עובדים</div>
+          <div className="page-sub">{staff.length} עובדים · {pending.length} ממתינים לאישור</div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={loadAll}>רענן</button>
       </div>
-      {loading && <div className="empty"><div className="spin" style={{width:28,height:28,margin:"0 auto 10px"}}/></div>}
-      {!loading && pending.length===0 && <div className="card"><div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין בקשות ממתינות</div></div>}
-      {pending.map(item=>(
-        <div key={item.id} className="card" style={{marginBottom:12}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
-            <div>
-              <div style={{fontSize:16,fontWeight:700,color:"var(--tp)",marginBottom:4}}>{item.full_name}</div>
-              <div style={{fontSize:13,color:"var(--ts)",marginBottom:4}}>{item.email}</div>
-              <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <span className="badge badge-info">{ROLE_LABELS[item.role]}</span>
-                <span style={{fontSize:12,color:"var(--tm)"}}>{new Date(item.created_at).toLocaleDateString("he-IL")}</span>
-              </div>
+
+      <div className="tabs">
+        <div className={`tab ${tab==="staff"?"active":""}`} onClick={()=>setTab("staff")}>
+          עובדים פעילים ({staff.length})
+        </div>
+        <div className={`tab ${tab==="pending"?"active":""}`} onClick={()=>setTab("pending")}>
+          ממתינים לאישור {pending.length>0&&<span className="nav-badge" style={{marginRight:6}}>{pending.length}</span>}
+        </div>
+      </div>
+
+      {/* Modals */}
+      {showReset && selected && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowReset(false)}>
+          <div className="modal">
+            <div className="modal-title">איפוס סיסמה — {selected.full_name}</div>
+            <div className="fg">
+              <label className="fl">סיסמה חדשה (לפחות 6 תווים)</label>
+              <input className="fi" type="password" placeholder="סיסמה חדשה" value={newPass} onChange={e=>setNewPass(e.target.value)}/>
             </div>
-            <div style={{display:"flex",gap:8}}>
-              <button className="btn btn-danger btn-sm" onClick={()=>reject(item)} disabled={acting===item.id}>{acting===item.id?<span className="spin"/>:"דחה"}</button>
-              <button className="btn btn-success" onClick={()=>approve(item)} disabled={acting===item.id}>{acting===item.id?<span className="spin"/>:"אשר גישה"}</button>
+            {newPass.length>0&&newPass.length<6&&<div className="err">סיסמה חייבת להכיל לפחות 6 תווים</div>}
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>{setShowReset(false);setNewPass("");}}>ביטול</button>
+              <button className="btn btn-primary" onClick={resetPassword} disabled={saving||newPass.length<6}>{saving?<span className="spin"/>:"אפס סיסמה"}</button>
             </div>
           </div>
         </div>
-      ))}
+      )}
+
+      {showRole && selected && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowRole(false)}>
+          <div className="modal">
+            <div className="modal-title">שינוי תפקיד — {selected.full_name}</div>
+            <div className="fg">
+              <label className="fl">תפקיד נוכחי: {ROLE_LABELS[selected.role]}</label>
+              <select className="fs" value={newRole} onChange={e=>setNewRole(e.target.value)}>
+                <option value="">בחר תפקיד חדש...</option>
+                <option value="maitre_d">אחמ"ש</option>
+                <option value="kitchen_manager">מנהל מטבח</option>
+                <option value="kitchen_staff">עובד מטבח</option>
+              </select>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>{setShowRole(false);setNewRole("");}}>ביטול</button>
+              <button className="btn btn-primary" onClick={changeRole} disabled={saving||!newRole}>{saving?<span className="spin"/>:"שמור"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active staff */}
+      {tab==="staff" && (
+        <div>
+          <div className="fg">
+            <input className="fi" placeholder="חפש עובד..." value={search} onChange={e=>setSearch(e.target.value)}/>
+          </div>
+          {loading
+            ? <div className="empty"><div className="spin" style={{width:28,height:28,margin:"0 auto"}}/></div>
+            : filtered.map(member=>(
+              <div key={member.id} className="card" style={{marginBottom:10,opacity:member.is_active?1:.5}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div className="avatar" style={{width:38,height:38,fontSize:13}}>
+                      {member.full_name?.split(" ").map(w=>w[0]).join("").slice(0,2)}
+                    </div>
+                    <div>
+                      <div style={{fontSize:15,fontWeight:700,color:"var(--tp)"}}>{member.full_name}</div>
+                      <div style={{display:"flex",gap:6,marginTop:4,alignItems:"center"}}>
+                        <span className={`badge ${roleColors[member.role]||"badge-neu"}`}>{ROLE_LABELS[member.role]}</span>
+                        {!member.is_active&&<span className="badge badge-danger">מושבת</span>}
+                      </div>
+                    </div>
+                  </div>
+                  {member.id!==profile.id
+                    ? <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>{setSelected(member);setShowRole(true);}}>שנה תפקיד</button>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>{setSelected(member);setShowReset(true);}}>איפוס סיסמה</button>
+                        <button className={`btn btn-sm ${member.is_active?"btn-warn":"btn-success"}`} onClick={()=>toggleActive(member)}>{member.is_active?"השבת":"הפעל"}</button>
+                        <button className="btn btn-danger btn-sm" onClick={()=>deleteStaff(member)}>מחק</button>
+                      </div>
+                    : <span className="badge badge-neu">זה אתה</span>
+                  }
+                </div>
+              </div>
+            ))
+          }
+        </div>
+      )}
+
+      {/* Pending approvals */}
+      {tab==="pending" && (
+        <div>
+          {pending.length===0
+            ? <div className="card"><div className="empty"><div style={{fontSize:20,marginBottom:8}}>—</div>אין בקשות ממתינות</div></div>
+            : pending.map(item=>(
+              <div key={item.id} className="card" style={{marginBottom:10}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+                  <div>
+                    <div style={{fontSize:16,fontWeight:700,color:"var(--tp)",marginBottom:4}}>{item.full_name}</div>
+                    <div style={{fontSize:13,color:"var(--ts)",marginBottom:4}}>{item.email}</div>
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <span className={`badge ${roleColors[item.role]||"badge-neu"}`}>{ROLE_LABELS[item.role]}</span>
+                      <span style={{fontSize:12,color:"var(--tm)"}}>{new Date(item.created_at).toLocaleDateString("he-IL")}</span>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button className="btn btn-danger btn-sm" onClick={()=>reject(item)} disabled={acting===item.id}>{acting===item.id?<span className="spin"/>:"דחה"}</button>
+                    <button className="btn btn-success" onClick={()=>approve(item)} disabled={acting===item.id}>{acting===item.id?<span className="spin"/>:"אשר גישה"}</button>
+                  </div>
+                </div>
+              </div>
+            ))
+          }
+        </div>
+      )}
     </div>
   );
 }
@@ -1449,8 +1599,7 @@ export default function App() {
           {nav==="returns" && <Returns returns={returns} setReturns={setReturns} menuItems={menuItems} session={session} profile={profile}/>}
           {nav==="morning" && <MorningTasks closed={closed} returns={returns} tasks={tasks} setTasks={setTasks} session={session} profile={profile}/>}
           {nav==="menu"    && <MenuManager menuItems={menuItems} setMenuItems={setMenuItems} session={session} profile={profile}/>}
-          {nav==="employees" && <StaffManager session={session} profile={profile}/>}
-          {nav==="staff"   && <StaffApproval session={session} profile={profile}/>}
+          {nav==="staff" && <StaffHub session={session} profile={profile}/>}
           {nav==="summary" && <DailySummary closed={closed} returns={returns} tasks={tasks} session={session} profile={profile}/>}
         </div>
 
