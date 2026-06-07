@@ -1386,10 +1386,45 @@ function StaffHub({ session, profile }) {
 // ── REPORT CARD ──
 function ReportCard({ report: r }) {
   const [expanded, setExpanded] = useState(false);
+  const [selectedReturn, setSelectedReturn] = useState(null);
+  const toggle = (e) => { e.stopPropagation(); setExpanded(p => !p); };
 
   return (
     <div className="card" style={{marginBottom:12}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={()=>setExpanded(p=>!p)}>
+      {selectedReturn && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setSelectedReturn(null)}>
+          <div className="modal">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div className="modal-title" style={{margin:0}}>{selectedReturn.dish_name}</div>
+              <button onClick={()=>setSelectedReturn(null)} style={{background:"none",border:"none",color:"var(--ts)",fontSize:22,cursor:"pointer"}}>×</button>
+            </div>
+            {selectedReturn.image_url && (
+              <img src={selectedReturn.image_url} style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:"var(--r)",marginBottom:14,border:"1px solid var(--br)"}}/>
+            )}
+            <div style={{background:"var(--bg)",borderRadius:"var(--r)",padding:14,marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>שולחן</span>
+                <span style={{color:"var(--tp)",fontWeight:600}}>שולחן {selectedReturn.table_number}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>סיבה</span>
+                <span className="badge badge-warn">{selectedReturn.reason}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>שעה</span>
+                <span style={{color:"var(--tp)",fontSize:13}}>{selectedReturn.created_at?new Date(selectedReturn.created_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""}</span>
+              </div>
+            </div>
+            {selectedReturn.notes && (
+              <div style={{background:"var(--bg)",borderRadius:"var(--r)",padding:14}}>
+                <div style={{fontSize:12,color:"var(--ts)",marginBottom:6}}>הערות</div>
+                <div style={{fontSize:14,color:"var(--tp)"}}>{selectedReturn.notes}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={toggle}>
         <div>
           <div style={{fontSize:15,fontWeight:700,color:"var(--tp)"}}>{new Date(r.report_date).toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}</div>
           <div style={{fontSize:12,color:"var(--tm)",marginTop:2}}>{new Date(r.created_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"})}</div>
@@ -1419,12 +1454,19 @@ function ReportCard({ report: r }) {
             <div>
               <div style={{fontSize:12,color:"var(--ts)",fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>מנות שחזרו</div>
               {r.returns_data.map((d,i)=>(
-                <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--br)"}}>
+                <div key={i} onClick={()=>setSelectedReturn(d)}
+                  style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--br)",cursor:"pointer",transition:"background .2s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="var(--hover)"}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                   <div>
-                    <span style={{fontSize:13,color:"var(--tp)"}}>{d.dish_name}</span>
+                    <span style={{fontSize:13,color:"var(--tp)",fontWeight:600}}>{d.dish_name}</span>
                     <span style={{fontSize:11,color:"var(--tm)",marginRight:8}}> · שולחן {d.table_number}</span>
+                    {d.notes && <div style={{fontSize:11,color:"var(--tm)",marginTop:2}}>{d.notes}</div>}
                   </div>
-                  <span className="badge badge-warn" style={{fontSize:11}}>{d.reason}</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span className="badge badge-warn" style={{fontSize:11}}>{d.reason}</span>
+                    <span style={{color:"var(--ts)",fontSize:12}}>›</span>
+                  </div>
                 </div>
               ))}
             </div>
