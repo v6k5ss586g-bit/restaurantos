@@ -545,6 +545,7 @@ function Returns({ returns, setReturns, menuItems, session, profile }) {
   const [image, setImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [selectedReturn, setSelectedReturn] = useState(null);
   const dishOptions = menuItems.length>0
     ? (retCategory ? menuItems.filter(m=>m.category===retCategory).map(m=>m.name) : [])
     : ["אסאדו בורגר","אמריקן דרים","דיוטי קומבו","קיסר סלד","ריבס"];
@@ -585,6 +586,44 @@ function Returns({ returns, setReturns, menuItems, session, profile }) {
       {alerts.map(a=>(
         <div key={a.dish} className="alert"><div style={{fontSize:14,fontWeight:700,color:"var(--danger)"}}>!</div><div><div className="alert-title">{a.dish} חזרה {a.count} פעמים!</div><div className="alert-sub">מנה בעייתית – נדרש בדיקה</div></div></div>
       ))}
+      {selectedReturn && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setSelectedReturn(null)}>
+          <div className="modal">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div className="modal-title" style={{margin:0}}>{selectedReturn.dish_name}</div>
+              <button onClick={()=>setSelectedReturn(null)} style={{background:"none",border:"none",color:"var(--ts)",fontSize:20,cursor:"pointer"}}>×</button>
+            </div>
+            {selectedReturn.image_url && (
+              <img src={selectedReturn.image_url} style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:"var(--r)",marginBottom:14,border:"1px solid var(--br)"}}/>
+            )}
+            <div style={{background:"var(--bg)",borderRadius:"var(--r)",padding:14,marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>שולחן</span>
+                <span style={{color:"var(--tp)",fontWeight:600}}>שולחן {selectedReturn.table_number}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>סיבה</span>
+                <span className="badge badge-warn">{selectedReturn.reason}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>מדווח</span>
+                <span style={{color:"var(--tp)",fontSize:13}}>{selectedReturn.reported_by_name||"—"}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>שעה</span>
+                <span style={{color:"var(--tp)",fontSize:13}}>{selectedReturn.created_at?new Date(selectedReturn.created_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""}</span>
+              </div>
+            </div>
+            {selectedReturn.notes && (
+              <div style={{background:"var(--bg)",borderRadius:"var(--r)",padding:14}}>
+                <div style={{fontSize:12,color:"var(--ts)",marginBottom:6}}>הערות</div>
+                <div style={{fontSize:14,color:"var(--tp)"}}>{selectedReturn.notes}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="tabs">
         {[["list","רשימת החזרות"],["analysis","ניתוח נתונים"]].map(([id,label])=>(
           <div key={id} className={`tab ${tab===id?"active":""}`} onClick={()=>setTab(id)}>{label}</div>
@@ -1343,6 +1382,62 @@ function StaffHub({ session, profile }) {
 
 
 
+
+// ── REPORT CARD ──
+function ReportCard({ report: r }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="card" style={{marginBottom:12}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={()=>setExpanded(p=>!p)}>
+        <div>
+          <div style={{fontSize:15,fontWeight:700,color:"var(--tp)"}}>{new Date(r.report_date).toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}</div>
+          <div style={{fontSize:12,color:"var(--tm)",marginTop:2}}>{new Date(r.created_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"})}</div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <span className="badge badge-danger">סגירות: {r.closed_count}</span>
+          <span className="badge badge-warn">החזרות: {r.returns_count}</span>
+          <span className="badge badge-success">{r.tasks_done}/{r.tasks_total}</span>
+          <span style={{color:"var(--ts)",fontSize:18,marginRight:4}}>{expanded?"▲":"▼"}</span>
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={{marginTop:14,borderTop:"1px solid var(--br)",paddingTop:14}}>
+          {r.closed_data?.length>0 && (
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:12,color:"var(--ts)",fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>מנות שנסגרו</div>
+              {r.closed_data.map((d,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--br)"}}>
+                  <span style={{fontSize:13,color:"var(--tp)"}}>{d.dish_name}</span>
+                  <span className="badge badge-neu" style={{fontSize:11}}>{d.reason}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {r.returns_data?.length>0 && (
+            <div>
+              <div style={{fontSize:12,color:"var(--ts)",fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>מנות שחזרו</div>
+              {r.returns_data.map((d,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--br)"}}>
+                  <div>
+                    <span style={{fontSize:13,color:"var(--tp)"}}>{d.dish_name}</span>
+                    <span style={{fontSize:11,color:"var(--tm)",marginRight:8}}> · שולחן {d.table_number}</span>
+                  </div>
+                  <span className="badge badge-warn" style={{fontSize:11}}>{d.reason}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {!r.closed_data?.length && !r.returns_data?.length && (
+            <div style={{fontSize:13,color:"var(--tm)",textAlign:"center",padding:8}}>יום ללא אירועים</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── CLOSE DAY BUTTON ──
 function CloseDayButton({ closing, closedToday, returnsToday, tasksDone, tasksTotal, onConfirm }) {
   const [showConfirm, setShowConfirm] = useState(false);
@@ -1596,24 +1691,7 @@ function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, p
             : reports.length===0
               ? <div className="card"><div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין דוחות עדיין<div style={{fontSize:12,marginTop:8,color:"var(--tm)"}}>לחץ "סגור יום" כדי לשמור את הדוח הראשון</div></div></div>
               : reports.map(r=>(
-                <div key={r.id} className="card" style={{marginBottom:12}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                    <div>
-                      <div style={{fontSize:16,fontWeight:700,color:"var(--tp)"}}>{new Date(r.report_date).toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}</div>
-                      <div style={{fontSize:12,color:"var(--tm)",marginTop:2}}>{new Date(r.created_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"})}</div>
-                    </div>
-                    <div style={{display:"flex",gap:8}}>
-                      <span className="badge badge-danger">סגירות: {r.closed_count}</span>
-                      <span className="badge badge-warn">החזרות: {r.returns_count}</span>
-                      <span className="badge badge-success">משימות: {r.tasks_done}/{r.tasks_total}</span>
-                    </div>
-                  </div>
-                  {r.returns_data?.length>0 && (
-                    <div style={{fontSize:12,color:"var(--tm)"}}>
-                      החזרות: {[...new Set(r.returns_data.map(x=>x.dish_name))].join(", ")}
-                    </div>
-                  )}
-                </div>
+                <ReportCard key={r.id} report={r}/>
               ))
           }
         </div>
