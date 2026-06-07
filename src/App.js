@@ -282,7 +282,7 @@ function RegisterScreen({ onBack }) {
     <div className="login-wrap">
       <div className="login-card">
         <div style={{textAlign:"center",marginBottom:24}}>
-          <div style={{width:60,height:60,background:"var(--acc-dim)",border:"1px solid var(--accent)",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",fontSize:26}}>👤</div>
+          <div style={{width:60,height:60,background:"var(--acc-dim)",border:"1px solid var(--accent)",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",fontSize:26}}></div>
           <div style={{fontSize:20,fontWeight:800,color:"var(--tp)"}}>הרשמה לצוות</div>
           <div style={{fontSize:13,color:"var(--ts)",marginTop:4}}>סניף {BRANCH_NAME}</div>
         </div>
@@ -335,7 +335,7 @@ function LoginScreen({ onLogin, onRegister }) {
     <div className="login-wrap">
       <div className="login-card">
         <div style={{textAlign:"center",marginBottom:28}}>
-          <div style={{width:60,height:60,background:"var(--acc-dim)",border:"1px solid var(--accent)",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",fontSize:26}}>🍽️</div>
+          <div style={{width:60,height:60,background:"var(--acc-dim)",border:"1px solid var(--accent)",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",fontSize:26}}></div>
           <div style={{fontSize:22,fontWeight:800,color:"var(--tp)"}}>Restaurant<span style={{color:"var(--accent)"}}>OS</span></div>
           <div style={{fontSize:13,color:"var(--ts)",marginTop:4}}>סניף {BRANCH_NAME}</div>
         </div>
@@ -377,13 +377,13 @@ function Dashboard({ closed, returns }) {
         <div className="page-title">Dashboard</div>
         <div className="page-sub">סקירה כללית · סניף {BRANCH_NAME} · {TODAY()}</div>
       </div>
-      {diotyCnt>=3 && <div className="alert"><div style={{fontSize:18}}>⚠️</div><div><div className="alert-title">דיוטי קומבו חזרה {diotyCnt} פעמים היום!</div><div className="alert-sub">נדרש טיפול מיידי</div></div></div>}
-      {closedNow>=2 && <div className="alert warn"><div style={{fontSize:18}}>🚫</div><div><div className="alert-title">{closedNow} מנות סגורות כרגע</div><div className="alert-sub">עדכן את הצוות</div></div></div>}
+      {diotyCnt>=3 && <div className="alert"><div style={{fontSize:14,fontWeight:700,color:"var(--danger)"}}>!</div><div><div className="alert-title">דיוטי קומבו חזרה {diotyCnt} פעמים היום!</div><div className="alert-sub">נדרש טיפול מיידי</div></div></div>}
+      {closedNow>=2 && <div className="alert warn"><div style={{fontSize:14,fontWeight:700,color:"var(--warn)"}}>!</div><div><div className="alert-title">{closedNow} מנות סגורות כרגע</div><div className="alert-sub">עדכן את הצוות</div></div></div>}
       <div className="g4">
         {[
-          {label:"מנות סגורות כרגע",val:closedNow,sub:"ממתינות לפתיחה",icon:"🚫",cls:"danger"},
-          {label:"החזרות היום",val:rToday,sub:"מנות שחזרו",icon:"↩️",cls:"warn"},
-          {label:"סה״כ החזרות",val:returns.length,sub:"כל הזמנים",icon:"📊",cls:"info"},
+          {label:"מנות סגורות כרגע",val:closedNow,sub:"ממתינות לפתיחה",icon:"⊘",cls:"danger"},
+          {label:"החזרות היום",val:rToday,sub:"מנות שחזרו",icon:"↩",cls:"warn"},
+          {label:"סה״כ החזרות",val:returns.length,sub:"כל הזמנים",icon:"◈",cls:"info"},
           {label:"אחוז החזרות",val:"–",sub:"מסך ההזמנות",icon:"📈",cls:"success"},
         ].map(m=>(
           <div key={m.label} className={`mcard ${m.cls}`}>
@@ -397,7 +397,7 @@ function Dashboard({ closed, returns }) {
       <div className="g2">
         <div className="card">
           <div className="card-title">Top 5 מנות שחזרו</div>
-          {top5.length===0 ? <div className="empty"><div className="empty-icon">🎉</div>אין החזרות</div>
+          {top5.length===0 ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין החזרות</div>
             : top5.map(([dish,cnt],i)=>(
               <div key={dish} className="bar-row">
                 <div className="bar-label">{dish}</div>
@@ -420,7 +420,7 @@ function Dashboard({ closed, returns }) {
       <div className="card">
         <div className="card-title">מנות סגורות עכשיו</div>
         {closed.filter(d=>d.status==="closed").length===0
-          ? <div className="empty"><div className="empty-icon">✅</div>כל המנות פתוחות</div>
+          ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>כל המנות פתוחות</div>
           : closed.filter(d=>d.status==="closed").map(d=>(
             <div key={d.id} className="dish-item closed">
               <div><div className="dish-name">{d.dish_name}</div><div className="dish-meta">{d.reason} · {d.closed_at?new Date(d.closed_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""}</div></div>
@@ -481,7 +481,7 @@ function ClosedDishes({ closed, setClosed, menuItems, session, profile }) {
           <div className="card-title" style={{margin:0}}>מנות סגורות כרגע</div>
           <span className="badge badge-danger">{active.length}</span>
         </div>
-        {active.length===0 ? <div className="empty"><div className="empty-icon">✅</div>אין מנות סגורות</div>
+        {active.length===0 ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין מנות סגורות</div>
           : active.map(d=>(
             <div key={d.id} className="dish-item closed">
               <div><div className="dish-name">{d.dish_name}</div><div className="dish-meta">{d.category} · {d.reason}{d.notes?` · ${d.notes}`:""}</div></div>
@@ -535,7 +535,7 @@ function Returns({ returns, setReturns, menuItems, session, profile }) {
         <button className="btn btn-warn" onClick={()=>setShowF(true)}>+ דווח החזרה</button>
       </div>
       {alerts.map(a=>(
-        <div key={a.dish} className="alert"><div style={{fontSize:18}}>⚠️</div><div><div className="alert-title">{a.dish} חזרה {a.count} פעמים!</div><div className="alert-sub">מנה בעייתית – נדרש בדיקה</div></div></div>
+        <div key={a.dish} className="alert"><div style={{fontSize:14,fontWeight:700,color:"var(--danger)"}}>!</div><div><div className="alert-title">{a.dish} חזרה {a.count} פעמים!</div><div className="alert-sub">מנה בעייתית – נדרש בדיקה</div></div></div>
       ))}
       <div className="tabs">
         {[["list","רשימת החזרות"],["analysis","ניתוח נתונים"]].map(([id,label])=>(
@@ -564,7 +564,7 @@ function Returns({ returns, setReturns, menuItems, session, profile }) {
       {tab==="list" && (
         <div className="card">
           <div className="card-title">כל ההחזרות ({returns.length})</div>
-          {returns.length===0 ? <div className="empty"><div className="empty-icon">🎉</div>אין החזרות עדיין</div>
+          {returns.length===0 ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין החזרות עדיין</div>
             : <div className="tw"><table><thead><tr>{["מנה","שולחן","סיבה","הערות","שעה"].map(t=><th key={t}>{t}</th>)}</tr></thead>
               <tbody>{returns.map(r=>(
                 <tr key={r.id}>
@@ -620,8 +620,8 @@ function MorningTasks({ closed, returns, tasks, setTasks, session, profile }) {
         </div>
       </div>
       <div className="card">
-        <div className="card-title">✅ רשימת משימות</div>
-        {tasks.length===0 ? <div className="empty"><div className="empty-icon">☀️</div>אין משימות להיום</div>
+        <div className="card-title">רשימת משימות</div>
+        {tasks.length===0 ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין משימות להיום</div>
           : tasks.map(t=>(
             <div key={t.id} className={`task-item ${t.is_done?"done":""}`} onClick={()=>toggle(t)}>
               <div className="task-cb">{t.is_done?"✓":""}</div>
@@ -706,7 +706,7 @@ function MenuManager({ menuItems, setMenuItems, session, profile }) {
           </div>
         );
       })}
-      {menuItems.length===0 && <div className="card"><div className="empty"><div className="empty-icon">📋</div>אין מנות בתפריט עדיין</div></div>}
+      {menuItems.length===0 && <div className="card"><div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין מנות בתפריט עדיין</div></div>}
     </div>
   );
 }
@@ -750,7 +750,7 @@ function StaffApproval({ session, profile }) {
         <button className="btn btn-ghost btn-sm" onClick={load}>🔄 רענן</button>
       </div>
       {loading && <div className="empty"><div className="spin" style={{width:28,height:28,margin:"0 auto 10px"}}/></div>}
-      {!loading && pending.length===0 && <div className="card"><div className="empty"><div className="empty-icon">✅</div>אין בקשות ממתינות</div></div>}
+      {!loading && pending.length===0 && <div className="card"><div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין בקשות ממתינות</div></div>}
       {pending.map(item=>(
         <div key={item.id} className="card" style={{marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
@@ -763,8 +763,8 @@ function StaffApproval({ session, profile }) {
               </div>
             </div>
             <div style={{display:"flex",gap:8}}>
-              <button className="btn btn-danger btn-sm" onClick={()=>reject(item)} disabled={acting===item.id}>{acting===item.id?<span className="spin"/>:"❌ דחה"}</button>
-              <button className="btn btn-success" onClick={()=>approve(item)} disabled={acting===item.id}>{acting===item.id?<span className="spin"/>:"✅ אשר גישה"}</button>
+              <button className="btn btn-danger btn-sm" onClick={()=>reject(item)} disabled={acting===item.id}>{acting===item.id?<span className="spin"/>:"דחה"}</button>
+              <button className="btn btn-success" onClick={()=>approve(item)} disabled={acting===item.id}>{acting===item.id?<span className="spin"/>:"אשר גישה"}</button>
             </div>
           </div>
         </div>
@@ -828,7 +828,7 @@ function DailySummary({ closed, returns, tasks, session, profile }) {
 
   if (closedDay) return (
     <div style={{textAlign:"center",padding:"60px 20px"}}>
-      <div style={{fontSize:64,marginBottom:16}}>🌙</div>
+      <div style={{fontSize:40,marginBottom:16,color:"var(--accent)"}}>✓</div>
       <div style={{fontSize:24,fontWeight:800,color:"var(--tp)",marginBottom:8}}>היום נסגר בהצלחה!</div>
       <div style={{fontSize:14,color:"var(--ts)",marginBottom:24}}>לילה טוב לכולם · {new Date().toLocaleDateString("he-IL")}</div>
       <div style={{background:"var(--card)",border:"1px solid var(--br)",borderRadius:"var(--rl)",padding:20,maxWidth:400,margin:"0 auto",textAlign:"right"}}>
@@ -848,7 +848,7 @@ function DailySummary({ closed, returns, tasks, session, profile }) {
           <div className="page-title">סיכום יומי</div>
           <div className="page-sub">{new Date().toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}</div>
         </div>
-        <button className="btn btn-danger" onClick={closeDay} disabled={closing}>{closing?<span className="spin"/>:"🌙 סגור יום"}</button>
+        <button className="btn btn-danger" onClick={closeDay} disabled={closing}>{closing?<span className="spin"/>:"סגור יום"}</button>
       </div>
 
       <div className="tabs">
@@ -860,10 +860,10 @@ function DailySummary({ closed, returns, tasks, session, profile }) {
         <div>
           <div className="g4">
             {[
-              {label:"מנות שנסגרו",val:closedToday.length,sub:"במהלך היום",icon:"🚫",cls:"danger"},
-              {label:"מנות שחזרו",val:returnsToday.length,sub:"מלקוחות",icon:"↩️",cls:"warn"},
+              {label:"מנות שנסגרו",val:closedToday.length,sub:"במהלך היום",icon:"⊘",cls:"danger"},
+              {label:"מנות שחזרו",val:returnsToday.length,sub:"מלקוחות",icon:"↩",cls:"warn"},
               {label:"משימות בוצעו",val:`${tasksDone}/${tasksTotal}`,sub:"מרשימת הבוקר",icon:"✅",cls:"success"},
-              {label:"אחוז ביצוע",val:`${tasksTotal>0?Math.round((tasksDone/tasksTotal)*100):0}%`,sub:"יעילות משמרת",icon:"📊",cls:"info"},
+              {label:"אחוז ביצוע",val:`${tasksTotal>0?Math.round((tasksDone/tasksTotal)*100):0}%`,sub:"יעילות משמרת",icon:"◈",cls:"info"},
             ].map(m=>(
               <div key={m.label} className={`mcard ${m.cls}`}>
                 <div className="mlabel">{m.label}</div>
@@ -876,9 +876,9 @@ function DailySummary({ closed, returns, tasks, session, profile }) {
 
           <div className="g2">
             <div className="card">
-              <div className="card-title">🚫 מנות שנסגרו היום</div>
+              <div className="card-title">מנות שנסגרו היום</div>
               {closedToday.length===0
-                ? <div className="empty"><div className="empty-icon">✨</div>לא נסגרו מנות היום</div>
+                ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>לא נסגרו מנות היום</div>
                 : closedToday.map(d=>(
                   <div key={d.id} className="dish-item closed">
                     <div>
@@ -891,9 +891,9 @@ function DailySummary({ closed, returns, tasks, session, profile }) {
               }
             </div>
             <div className="card">
-              <div className="card-title">↩️ מנות שחזרו היום</div>
+              <div className="card-title">מנות שחזרו היום</div>
               {returnsToday.length===0
-                ? <div className="empty"><div className="empty-icon">🎉</div>אין החזרות היום!</div>
+                ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין החזרות היום!</div>
                 : returnsToday.map(r=>(
                   <div key={r.id} className="dish-item">
                     <div>
@@ -933,7 +933,7 @@ function DailySummary({ closed, returns, tasks, session, profile }) {
           )}
 
           <div className="card">
-            <div className="card-title">☀️ משימות בוקר</div>
+            <div className="card-title">משימות בוקר</div>
             {tasks.length===0
               ? <div className="empty">אין משימות</div>
               : tasks.map(t=>(
@@ -952,7 +952,7 @@ function DailySummary({ closed, returns, tasks, session, profile }) {
           {loadingReports
             ? <div className="empty"><div className="spin" style={{width:28,height:28,margin:"0 auto 10px"}}/></div>
             : reports.length===0
-              ? <div className="card"><div className="empty"><div className="empty-icon">📋</div>אין דוחות עדיין<div style={{fontSize:12,marginTop:8,color:"var(--tm)"}}>לחץ "סגור יום" כדי לשמור את הדוח הראשון</div></div></div>
+              ? <div className="card"><div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין דוחות עדיין<div style={{fontSize:12,marginTop:8,color:"var(--tm)"}}>לחץ "סגור יום" כדי לשמור את הדוח הראשון</div></div></div>
               : reports.map(r=>(
                 <div key={r.id} className="card" style={{marginBottom:12}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
@@ -961,9 +961,9 @@ function DailySummary({ closed, returns, tasks, session, profile }) {
                       <div style={{fontSize:12,color:"var(--tm)",marginTop:2}}>{new Date(r.created_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"})}</div>
                     </div>
                     <div style={{display:"flex",gap:8}}>
-                      <span className="badge badge-danger">🚫 {r.closed_count}</span>
-                      <span className="badge badge-warn">↩️ {r.returns_count}</span>
-                      <span className="badge badge-success">✅ {r.tasks_done}/{r.tasks_total}</span>
+                      <span className="badge badge-danger">סגירות: {r.closed_count}</span>
+                      <span className="badge badge-warn">החזרות: {r.returns_count}</span>
+                      <span className="badge badge-success">משימות: {r.tasks_done}/{r.tasks_total}</span>
                     </div>
                   </div>
                   {r.returns_data?.length>0 && (
@@ -1063,13 +1063,13 @@ export default function App() {
   const initials = profile.full_name?.split(" ").map(w=>w[0]).join("").slice(0,2)||"?";
 
   const navItems = [
-    {id:"dash",   label:"Dashboard",    icon:"📊"},
-    {id:"closed", label:"סגירת מנות",   icon:"🚫",badge:closedCount||null},
-    {id:"returns",label:"מנות שחזרו",   icon:"↩️",badge:returns.length||null},
-    {id:"morning",label:"משימות בוקר",  icon:"☀️"},
-    {id:"menu",   label:"ניהול תפריט",  icon:"📋"},
-    {id:"staff",  label:"אישור עובדים", icon:"👥",managerOnly:true},
-    {id:"summary", label:"סיכום יומי",   icon:"🌙",managerOnly:true},
+    {id:"dash",   label:"Dashboard",    icon:"◈"},
+    {id:"closed", label:"סגירת מנות",   icon:"⊘",badge:closedCount||null},
+    {id:"returns",label:"מנות שחזרו",   icon:"↩",badge:returns.length||null},
+    {id:"morning",label:"משימות בוקר",  icon:"◎"},
+    {id:"menu",   label:"ניהול תפריט",  icon:"≡"},
+    {id:"staff",  label:"אישור עובדים", icon:"⊕",managerOnly:true},
+    {id:"summary", label:"סיכום יומי",   icon:"◐",managerOnly:true},
   ];
 
   return (
