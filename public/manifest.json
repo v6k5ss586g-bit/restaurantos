@@ -1,7 +1,7 @@
 {
-  "name": "RestaurantOS — רובן ירושלים",
-  "short_name": "RestaurantOS",
-  "description": "מערכת ניהול מסעדה",
+  "name": "FlowOS — רובן ירושלים",
+  "short_name": "FlowOS",
+  "description": "Kitchen to Floor — Live Sync",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",
