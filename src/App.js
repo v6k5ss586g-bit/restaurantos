@@ -774,9 +774,12 @@ function StaffApproval({ session, profile }) {
 
 
 // ── DAILY SUMMARY ──
-function DailySummary({ closed, returns, tasks }) {
+function DailySummary({ closed, returns, tasks, session, profile }) {
   const [closedDay, setClosedDay] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [tab, setTab] = useState("today");
+  const [reports, setReports] = useState([]);
+  const [loadingReports, setLoadingReports] = useState(false);
 
   const todayStr = new Date().toISOString().slice(0,10);
   const closedToday = closed.filter(d => d.closed_at?.startsWith(todayStr));
@@ -787,16 +790,39 @@ function DailySummary({ closed, returns, tasks }) {
   const dishC = {};
   returnsToday.forEach(r => { dishC[r.dish_name] = (dishC[r.dish_name]||0)+1; });
   const topReturns = Object.entries(dishC).sort((a,b)=>b[1]-a[1]).slice(0,5);
-
   const reaC = {};
   returnsToday.forEach(r => { reaC[r.reason] = (reaC[r.reason]||0)+1; });
   const topReasons = Object.entries(reaC).sort((a,b)=>b[1]-a[1]).slice(0,3);
 
+  const loadReports = async () => {
+    setLoadingReports(true);
+    const data = await sb.query("daily_reports", {
+      restaurant_id: `eq.${RESTAURANT_ID}`,
+      select: "*",
+      order: "report_date.desc",
+    }, session.access_token);
+    if (Array.isArray(data)) setReports(data);
+    setLoadingReports(false);
+  };
+
+  useEffect(() => { if (tab === "history") loadReports(); }, [tab]);
+
   const closeDay = async () => {
     setClosing(true);
-    await new Promise(r => setTimeout(r, 1500));
-    setClosedDay(true);
-    setClosing(false);
+    try {
+      await sb.insert("daily_reports", {
+        restaurant_id: RESTAURANT_ID,
+        report_date: todayStr,
+        closed_count: closedToday.length,
+        returns_count: returnsToday.length,
+        tasks_done: tasksDone,
+        tasks_total: tasksTotal,
+        closed_data: closedToday,
+        returns_data: returnsToday,
+        created_by: profile.id,
+      }, session.access_token);
+      setClosedDay(true);
+    } finally { setClosing(false); }
   };
 
   if (closedDay) return (
@@ -810,6 +836,7 @@ function DailySummary({ closed, returns, tasks }) {
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{color:"var(--ts)"}}>מנות שחזרו</span><span style={{fontWeight:700,color:"var(--warn)"}}>{returnsToday.length}</span></div>
         <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"var(--ts)"}}>משימות שבוצעו</span><span style={{fontWeight:700,color:"var(--success)"}}>{tasksDone}/{tasksTotal}</span></div>
       </div>
+      <button className="btn btn-ghost" style={{marginTop:20}} onClick={()=>{setClosedDay(false);setTab("history");}}>📋 צפה בהיסטוריה</button>
     </div>
   );
 
@@ -820,98 +847,138 @@ function DailySummary({ closed, returns, tasks }) {
           <div className="page-title">סיכום יומי</div>
           <div className="page-sub">{new Date().toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}</div>
         </div>
-        {["manager","maitre_d"].includes && <button className="btn btn-danger" onClick={closeDay} disabled={closing}>{closing?<span className="spin"/>:"🌙 סגור יום"}</button>}
+        <button className="btn btn-danger" onClick={closeDay} disabled={closing}>{closing?<span className="spin"/>:"🌙 סגור יום"}</button>
       </div>
 
-      <div className="g4">
-        {[
-          {label:"מנות שנסגרו",val:closedToday.length,sub:"במהלך היום",icon:"🚫",cls:"danger"},
-          {label:"מנות שחזרו",val:returnsToday.length,sub:"מלקוחות",icon:"↩️",cls:"warn"},
-          {label:"משימות בוצעו",val:`${tasksDone}/${tasksTotal}`,sub:"מרשימת הבוקר",icon:"✅",cls:"success"},
-          {label:"אחוז ביצוע",val:`${tasksTotal>0?Math.round((tasksDone/tasksTotal)*100):0}%`,sub:"יעילות משמרת",icon:"📊",cls:"info"},
-        ].map(m=>(
-          <div key={m.label} className={`mcard ${m.cls}`}>
-            <div className="mlabel">{m.label}</div>
-            <div className="mval">{m.val}</div>
-            <div className="msub">{m.sub}</div>
-            <div className="micon">{m.icon}</div>
-          </div>
-        ))}
+      <div className="tabs">
+        <div className={`tab ${tab==="today"?"active":""}`} onClick={()=>setTab("today")}>היום</div>
+        <div className={`tab ${tab==="history"?"active":""}`} onClick={()=>setTab("history")}>היסטוריה</div>
       </div>
 
-      <div className="g2">
-        <div className="card">
-          <div className="card-title">🚫 מנות שנסגרו היום</div>
-          {closedToday.length===0
-            ? <div className="empty"><div className="empty-icon">✨</div>לא נסגרו מנות היום</div>
-            : closedToday.map(d=>(
-              <div key={d.id} className="dish-item closed">
-                <div>
-                  <div className="dish-name">{d.dish_name}</div>
-                  <div className="dish-meta">{d.reason} · {d.closed_at?new Date(d.closed_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""}</div>
-                </div>
-                <span className={`badge ${d.status==="closed"?"badge-danger":"badge-success"}`}>{d.status==="closed"?"סגור":"נפתח"}</span>
-              </div>
-            ))
-          }
-        </div>
-        <div className="card">
-          <div className="card-title">↩️ מנות שחזרו היום</div>
-          {returnsToday.length===0
-            ? <div className="empty"><div className="empty-icon">🎉</div>אין החזרות היום!</div>
-            : returnsToday.map(r=>(
-              <div key={r.id} className="dish-item">
-                <div>
-                  <div className="dish-name">{r.dish_name}</div>
-                  <div className="dish-meta">שולחן {r.table_number} · {r.reason}</div>
-                </div>
-                <span className="badge badge-warn">{r.reason}</span>
-              </div>
-            ))
-          }
-        </div>
-      </div>
-
-      {returnsToday.length>0 && (
-        <div className="g2">
-          <div className="card">
-            <div className="card-title">Top מנות שחזרו</div>
-            {topReturns.map(([dish,cnt],i)=>(
-              <div key={dish} className="bar-row">
-                <div className="bar-label">{dish}</div>
-                <div className="bar-track"><div className="bar-fill" style={{width:`${(cnt/topReturns[0][1])*100}%`,background:COLORS[i]}}/></div>
-                <div className="bar-count">{cnt}</div>
+      {tab==="today" && (
+        <div>
+          <div className="g4">
+            {[
+              {label:"מנות שנסגרו",val:closedToday.length,sub:"במהלך היום",icon:"🚫",cls:"danger"},
+              {label:"מנות שחזרו",val:returnsToday.length,sub:"מלקוחות",icon:"↩️",cls:"warn"},
+              {label:"משימות בוצעו",val:`${tasksDone}/${tasksTotal}`,sub:"מרשימת הבוקר",icon:"✅",cls:"success"},
+              {label:"אחוז ביצוע",val:`${tasksTotal>0?Math.round((tasksDone/tasksTotal)*100):0}%`,sub:"יעילות משמרת",icon:"📊",cls:"info"},
+            ].map(m=>(
+              <div key={m.label} className={`mcard ${m.cls}`}>
+                <div className="mlabel">{m.label}</div>
+                <div className="mval">{m.val}</div>
+                <div className="msub">{m.sub}</div>
+                <div className="micon">{m.icon}</div>
               </div>
             ))}
           </div>
-          <div className="card">
-            <div className="card-title">סיבות עיקריות</div>
-            {topReasons.map(([reason,cnt],i)=>(
-              <div key={reason} className="bar-row">
-                <div className="bar-label">{reason}</div>
-                <div className="bar-track"><div className="bar-fill" style={{width:`${(cnt/topReasons[0][1])*100}%`,background:COLORS[i]}}/></div>
-                <div className="bar-count">{cnt}</div>
+
+          <div className="g2">
+            <div className="card">
+              <div className="card-title">🚫 מנות שנסגרו היום</div>
+              {closedToday.length===0
+                ? <div className="empty"><div className="empty-icon">✨</div>לא נסגרו מנות היום</div>
+                : closedToday.map(d=>(
+                  <div key={d.id} className="dish-item closed">
+                    <div>
+                      <div className="dish-name">{d.dish_name}</div>
+                      <div className="dish-meta">{d.reason} · {d.closed_at?new Date(d.closed_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""}</div>
+                    </div>
+                    <span className={`badge ${d.status==="closed"?"badge-danger":"badge-success"}`}>{d.status==="closed"?"סגור":"נפתח"}</span>
+                  </div>
+                ))
+              }
+            </div>
+            <div className="card">
+              <div className="card-title">↩️ מנות שחזרו היום</div>
+              {returnsToday.length===0
+                ? <div className="empty"><div className="empty-icon">🎉</div>אין החזרות היום!</div>
+                : returnsToday.map(r=>(
+                  <div key={r.id} className="dish-item">
+                    <div>
+                      <div className="dish-name">{r.dish_name}</div>
+                      <div className="dish-meta">שולחן {r.table_number} · {r.reason}</div>
+                    </div>
+                    <span className="badge badge-warn">{r.reason}</span>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+
+          {returnsToday.length>0 && (
+            <div className="g2">
+              <div className="card">
+                <div className="card-title">Top מנות שחזרו</div>
+                {topReturns.map(([dish,cnt],i)=>(
+                  <div key={dish} className="bar-row">
+                    <div className="bar-label">{dish}</div>
+                    <div className="bar-track"><div className="bar-fill" style={{width:`${(cnt/topReturns[0][1])*100}%`,background:COLORS[i]}}/></div>
+                    <div className="bar-count">{cnt}</div>
+                  </div>
+                ))}
               </div>
-            ))}
+              <div className="card">
+                <div className="card-title">סיבות עיקריות</div>
+                {topReasons.map(([reason,cnt],i)=>(
+                  <div key={reason} className="bar-row">
+                    <div className="bar-label">{reason}</div>
+                    <div className="bar-track"><div className="bar-fill" style={{width:`${(cnt/topReasons[0][1])*100}%`,background:COLORS[i]}}/></div>
+                    <div className="bar-count">{cnt}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <div className="card-title">☀️ משימות בוקר</div>
+            {tasks.length===0
+              ? <div className="empty">אין משימות</div>
+              : tasks.map(t=>(
+                <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid var(--br)"}}>
+                  <div style={{width:20,height:20,borderRadius:6,background:t.is_done?"var(--success)":"transparent",border:`2px solid ${t.is_done?"var(--success)":"var(--brs)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"white",flexShrink:0}}>{t.is_done?"✓":""}</div>
+                  <div style={{fontSize:14,color:t.is_done?"var(--tm)":"var(--ts)",textDecoration:t.is_done?"line-through":"none",flex:1}}>{t.text}</div>
+                </div>
+              ))
+            }
           </div>
         </div>
       )}
 
-      <div className="card">
-        <div className="card-title">☀️ משימות בוקר</div>
-        {tasks.length===0
-          ? <div className="empty">אין משימות</div>
-          : tasks.map(t=>(
-            <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid var(--br)"}}>
-              <div style={{width:20,height:20,borderRadius:6,background:t.is_done?"var(--success)":"transparent",border:`2px solid ${t.is_done?"var(--success)":"var(--brs)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"white",flexShrink:0}}>{t.is_done?"✓":""}</div>
-              <div style={{fontSize:14,color:t.is_done?"var(--tm)":"var(--ts)",textDecoration:t.is_done?"line-through":"none",flex:1}}>{t.text}</div>
-            </div>
-          ))
-        }
-      </div>
+      {tab==="history" && (
+        <div>
+          {loadingReports
+            ? <div className="empty"><div className="spin" style={{width:28,height:28,margin:"0 auto 10px"}}/></div>
+            : reports.length===0
+              ? <div className="card"><div className="empty"><div className="empty-icon">📋</div>אין דוחות עדיין<div style={{fontSize:12,marginTop:8,color:"var(--tm)"}}>לחץ "סגור יום" כדי לשמור את הדוח הראשון</div></div></div>
+              : reports.map(r=>(
+                <div key={r.id} className="card" style={{marginBottom:12}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                    <div>
+                      <div style={{fontSize:16,fontWeight:700,color:"var(--tp)"}}>{new Date(r.report_date).toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}</div>
+                      <div style={{fontSize:12,color:"var(--tm)",marginTop:2}}>{new Date(r.created_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"})}</div>
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <span className="badge badge-danger">🚫 {r.closed_count}</span>
+                      <span className="badge badge-warn">↩️ {r.returns_count}</span>
+                      <span className="badge badge-success">✅ {r.tasks_done}/{r.tasks_total}</span>
+                    </div>
+                  </div>
+                  {r.returns_data?.length>0 && (
+                    <div style={{fontSize:12,color:"var(--tm)"}}>
+                      החזרות: {[...new Set(r.returns_data.map(x=>x.dish_name))].join(", ")}
+                    </div>
+                  )}
+                </div>
+              ))
+          }
+        </div>
+      )}
     </div>
   );
 }
+
 
 // ── MAIN APP ──
 export default function App() {
