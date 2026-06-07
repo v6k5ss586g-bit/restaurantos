@@ -1271,6 +1271,65 @@ function StaffHub({ session, profile }) {
 }
 
 
+
+// ── CLOSE DAY BUTTON ──
+function CloseDayButton({ closing, closedToday, returnsToday, tasksDone, tasksTotal, onConfirm }) {
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const openCount = closedToday.filter(d => d.status === "closed").length;
+  const unfinished = tasksTotal - tasksDone;
+
+  return (
+    <>
+      <button className="btn btn-danger" onClick={() => setShowConfirm(true)} disabled={closing}>
+        {closing ? <span className="spin"/> : "סגור יום"}
+      </button>
+
+      {showConfirm && (
+        <div className="modal-bg" onClick={e => e.target === e.currentTarget && setShowConfirm(false)}>
+          <div className="modal">
+            <div className="modal-title" style={{marginBottom:8}}>סגירת יום — אישור</div>
+            <div style={{fontSize:13,color:"var(--ts)",marginBottom:20}}>לפני הסגירה, בדוק את הסיכום:</div>
+
+            <div style={{background:"var(--bg)",borderRadius:"var(--r)",padding:16,marginBottom:20}}>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)"}}>מנות שחזרו היום</span>
+                <span style={{fontWeight:700,color:returnsToday.length>0?"var(--warn)":"var(--success)"}}>{returnsToday.length}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)"}}>מנות סגורות כרגע</span>
+                <span style={{fontWeight:700,color:openCount>0?"var(--danger)":"var(--success)"}}>{openCount}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)"}}>משימות שלא בוצעו</span>
+                <span style={{fontWeight:700,color:unfinished>0?"var(--warn)":"var(--success)"}}>{unfinished}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}>
+                <span style={{color:"var(--ts)"}}>אחוז ביצוע משימות</span>
+                <span style={{fontWeight:700,color:"var(--accent)"}}>{tasksTotal>0?Math.round((tasksDone/tasksTotal)*100):0}%</span>
+              </div>
+            </div>
+
+            {openCount > 0 && (
+              <div className="alert warn" style={{marginBottom:16}}>
+                <div style={{fontSize:13,fontWeight:600,color:"var(--warn)"}}>שים לב!</div>
+                <div style={{fontSize:12,color:"var(--ts)",marginTop:2}}>יש {openCount} מנות סגורות — הן יישארו סגורות גם מחר.</div>
+              </div>
+            )}
+
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={() => setShowConfirm(false)}>ביטול</button>
+              <button className="btn btn-danger" onClick={() => { setShowConfirm(false); onConfirm(); }}>
+                אישור — סגור יום
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── DAILY SUMMARY ──
 function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, profile }) {
   const [closedDay, setClosedDay] = useState(false);
@@ -1353,7 +1412,14 @@ function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, p
           <div className="page-title">סיכום יומי</div>
           <div className="page-sub">{new Date().toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}</div>
         </div>
-        <button className="btn btn-danger" onClick={closeDay} disabled={closing}>{closing?<span className="spin"/>:"סגור יום"}</button>
+        <CloseDayButton
+          closing={closing}
+          closedToday={closedToday}
+          returnsToday={returnsToday}
+          tasksDone={tasksDone}
+          tasksTotal={tasksTotal}
+          onConfirm={closeDay}
+        />
       </div>
 
       <div className="tabs">
