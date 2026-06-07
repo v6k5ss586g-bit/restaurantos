@@ -510,7 +510,10 @@ function Returns({ returns, setReturns, menuItems, session, profile }) {
   const [tab, setTab] = useState("list");
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState({dish_name:"",table_number:"",reason:"",notes:""});
-  const dishOptions = menuItems.length>0 ? menuItems.map(m=>m.name) : ["אסאדו בורגר","אמריקן דרים","דיוטי קומבו","קיסר סלד","ריבס"];
+  const [retCategory, setRetCategory] = useState("");
+  const dishOptions = menuItems.length>0
+    ? (retCategory ? menuItems.filter(m=>m.category===retCategory).map(m=>m.name) : [])
+    : ["אסאדו בורגר","אמריקן דרים","דיוטי קומבו","קיסר סלד","ריבס"];
 
   const submit = async () => {
     if (!f.dish_name||!f.table_number||!f.reason) return;
