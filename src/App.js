@@ -98,7 +98,7 @@ html,body{font-family:'Heebo',sans-serif;direction:rtl;background:#0f1117;color:
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--brs);border-radius:2px}
 .app{display:flex;flex-direction:column;min-height:100vh}
 .topbar{background:var(--surf);border-bottom:1px solid rgba(232,255,0,.2);box-shadow:0 1px 20px rgba(212,160,23,.08);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:50}
-.logo{font-size:16px;font-weight:800;color:var(--tp)}
+.logo{font-size:16px;font-weight:100;color:var(--accent);letter-spacing:-1px}.logo-os{font-weight:900;color:white}.logo-line{display:inline-block;width:2px;height:18px;background:var(--accent);margin:0 8px 0 4px;vertical-align:middle}.logo-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin:0 6px;vertical-align:middle}
 .logo span{color:var(--accent)}
 .branch{font-size:12px;font-weight:400;color:var(--ts);margin-right:8px}
 .nav-tabs{display:flex;gap:2px;overflow-x:auto}
@@ -351,7 +351,7 @@ function LoginScreen({ onLogin, onRegister }) {
       <div className="login-card">
         <div style={{textAlign:"center",marginBottom:28}}>
           <div style={{width:60,height:60,background:"var(--acc-dim)",border:"1px solid var(--accent)",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px",fontSize:26}}></div>
-          <div style={{fontSize:22,fontWeight:800,color:"var(--tp)"}}>Restaurant<span style={{color:"var(--accent)"}}>OS</span></div>
+          <div style={{fontSize:28,fontWeight:100,color:"var(--accent)",letterSpacing:-1}}>FLOW<span style={{display:"inline-block",width:5,height:5,borderRadius:"50%",background:"var(--accent)",margin:"0 6px 4px",verticalAlign:"middle"}}></span><span style={{fontWeight:900,color:"white"}}>OS</span></div>
           <div style={{fontSize:13,color:"var(--ts)",marginTop:4}}>סניף {BRANCH_NAME}</div>
         </div>
         <div className="fg"><label className="fl">אימייל</label><input className="fi" type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr("")}} /></div>
@@ -1673,7 +1673,7 @@ export default function App() {
       <div className="app">
         <div className="topbar">
           <div style={{display:"flex",alignItems:"center",gap:16}}>
-            <div className="logo">Restaurant<span>OS</span><span className="branch">| סניף {BRANCH_NAME}</span></div>
+            <div className="logo">Flow<span>OS</span><span className="branch">| סניף {BRANCH_NAME}</span></div>
             <div className="nav-tabs">
               {navItems.filter(item=>!item.managerOnly||profile.role==="manager").map(item=>(
                 <div key={item.id} className={`nav-tab ${nav===item.id?"active":""}`} onClick={()=>setNav(item.id)}>
