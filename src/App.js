@@ -772,6 +772,147 @@ function StaffApproval({ session, profile }) {
   );
 }
 
+
+// ── DAILY SUMMARY ──
+function DailySummary({ closed, returns, tasks }) {
+  const [closedDay, setClosedDay] = useState(false);
+  const [closing, setClosing] = useState(false);
+
+  const todayStr = new Date().toISOString().slice(0,10);
+  const closedToday = closed.filter(d => d.closed_at?.startsWith(todayStr));
+  const returnsToday = returns.filter(r => r.created_at?.startsWith(todayStr));
+  const tasksDone = tasks.filter(t => t.is_done).length;
+  const tasksTotal = tasks.length;
+
+  const dishC = {};
+  returnsToday.forEach(r => { dishC[r.dish_name] = (dishC[r.dish_name]||0)+1; });
+  const topReturns = Object.entries(dishC).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  const reaC = {};
+  returnsToday.forEach(r => { reaC[r.reason] = (reaC[r.reason]||0)+1; });
+  const topReasons = Object.entries(reaC).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+  const closeDay = async () => {
+    setClosing(true);
+    await new Promise(r => setTimeout(r, 1500));
+    setClosedDay(true);
+    setClosing(false);
+  };
+
+  if (closedDay) return (
+    <div style={{textAlign:"center",padding:"60px 20px"}}>
+      <div style={{fontSize:64,marginBottom:16}}>🌙</div>
+      <div style={{fontSize:24,fontWeight:800,color:"var(--tp)",marginBottom:8}}>היום נסגר בהצלחה!</div>
+      <div style={{fontSize:14,color:"var(--ts)",marginBottom:24}}>לילה טוב לכולם · {new Date().toLocaleDateString("he-IL")}</div>
+      <div style={{background:"var(--card)",border:"1px solid var(--br)",borderRadius:"var(--rl)",padding:20,maxWidth:400,margin:"0 auto",textAlign:"right"}}>
+        <div style={{fontSize:13,color:"var(--ts)",marginBottom:12,fontWeight:600}}>סיכום המשמרת</div>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{color:"var(--ts)"}}>מנות שנסגרו</span><span style={{fontWeight:700,color:"var(--danger)"}}>{closedToday.length}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{color:"var(--ts)"}}>מנות שחזרו</span><span style={{fontWeight:700,color:"var(--warn)"}}>{returnsToday.length}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"var(--ts)"}}>משימות שבוצעו</span><span style={{fontWeight:700,color:"var(--success)"}}>{tasksDone}/{tasksTotal}</span></div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">סיכום יומי</div>
+          <div className="page-sub">{new Date().toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}</div>
+        </div>
+        {["manager","maitre_d"].includes && <button className="btn btn-danger" onClick={closeDay} disabled={closing}>{closing?<span className="spin"/>:"🌙 סגור יום"}</button>}
+      </div>
+
+      <div className="g4">
+        {[
+          {label:"מנות שנסגרו",val:closedToday.length,sub:"במהלך היום",icon:"🚫",cls:"danger"},
+          {label:"מנות שחזרו",val:returnsToday.length,sub:"מלקוחות",icon:"↩️",cls:"warn"},
+          {label:"משימות בוצעו",val:`${tasksDone}/${tasksTotal}`,sub:"מרשימת הבוקר",icon:"✅",cls:"success"},
+          {label:"אחוז ביצוע",val:`${tasksTotal>0?Math.round((tasksDone/tasksTotal)*100):0}%`,sub:"יעילות משמרת",icon:"📊",cls:"info"},
+        ].map(m=>(
+          <div key={m.label} className={`mcard ${m.cls}`}>
+            <div className="mlabel">{m.label}</div>
+            <div className="mval">{m.val}</div>
+            <div className="msub">{m.sub}</div>
+            <div className="micon">{m.icon}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="g2">
+        <div className="card">
+          <div className="card-title">🚫 מנות שנסגרו היום</div>
+          {closedToday.length===0
+            ? <div className="empty"><div className="empty-icon">✨</div>לא נסגרו מנות היום</div>
+            : closedToday.map(d=>(
+              <div key={d.id} className="dish-item closed">
+                <div>
+                  <div className="dish-name">{d.dish_name}</div>
+                  <div className="dish-meta">{d.reason} · {d.closed_at?new Date(d.closed_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""}</div>
+                </div>
+                <span className={`badge ${d.status==="closed"?"badge-danger":"badge-success"}`}>{d.status==="closed"?"סגור":"נפתח"}</span>
+              </div>
+            ))
+          }
+        </div>
+        <div className="card">
+          <div className="card-title">↩️ מנות שחזרו היום</div>
+          {returnsToday.length===0
+            ? <div className="empty"><div className="empty-icon">🎉</div>אין החזרות היום!</div>
+            : returnsToday.map(r=>(
+              <div key={r.id} className="dish-item">
+                <div>
+                  <div className="dish-name">{r.dish_name}</div>
+                  <div className="dish-meta">שולחן {r.table_number} · {r.reason}</div>
+                </div>
+                <span className="badge badge-warn">{r.reason}</span>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+
+      {returnsToday.length>0 && (
+        <div className="g2">
+          <div className="card">
+            <div className="card-title">Top מנות שחזרו</div>
+            {topReturns.map(([dish,cnt],i)=>(
+              <div key={dish} className="bar-row">
+                <div className="bar-label">{dish}</div>
+                <div className="bar-track"><div className="bar-fill" style={{width:`${(cnt/topReturns[0][1])*100}%`,background:COLORS[i]}}/></div>
+                <div className="bar-count">{cnt}</div>
+              </div>
+            ))}
+          </div>
+          <div className="card">
+            <div className="card-title">סיבות עיקריות</div>
+            {topReasons.map(([reason,cnt],i)=>(
+              <div key={reason} className="bar-row">
+                <div className="bar-label">{reason}</div>
+                <div className="bar-track"><div className="bar-fill" style={{width:`${(cnt/topReasons[0][1])*100}%`,background:COLORS[i]}}/></div>
+                <div className="bar-count">{cnt}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-title">☀️ משימות בוקר</div>
+        {tasks.length===0
+          ? <div className="empty">אין משימות</div>
+          : tasks.map(t=>(
+            <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid var(--br)"}}>
+              <div style={{width:20,height:20,borderRadius:6,background:t.is_done?"var(--success)":"transparent",border:`2px solid ${t.is_done?"var(--success)":"var(--brs)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"white",flexShrink:0}}>{t.is_done?"✓":""}</div>
+              <div style={{fontSize:14,color:t.is_done?"var(--tm)":"var(--ts)",textDecoration:t.is_done?"line-through":"none",flex:1}}>{t.text}</div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
 // ── MAIN APP ──
 export default function App() {
   const { session, profile, loading, signIn, signOut } = useAuth();
