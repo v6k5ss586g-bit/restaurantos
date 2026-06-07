@@ -1272,7 +1272,7 @@ function StaffHub({ session, profile }) {
 
 
 // ── DAILY SUMMARY ──
-function DailySummary({ closed, returns, tasks, session, profile }) {
+function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, profile }) {
   const [closedDay, setClosedDay] = useState(false);
   const [closing, setClosing] = useState(false);
   const [tab, setTab] = useState("today");
@@ -1308,6 +1308,7 @@ function DailySummary({ closed, returns, tasks, session, profile }) {
   const closeDay = async () => {
     setClosing(true);
     try {
+      // שמור דוח יומי
       await sb.insert("daily_reports", {
         restaurant_id: RESTAURANT_ID,
         report_date: todayStr,
@@ -1319,6 +1320,13 @@ function DailySummary({ closed, returns, tasks, session, profile }) {
         returns_data: returnsToday,
         created_by: profile.id,
       }, session.access_token);
+
+      // אפס מנות שחזרו — מחק את כולן מהתצוגה
+      setReturns([]);
+
+      // אפס משימות בוקר — מחק את כולן מהתצוגה
+      setTasks([]);
+
       setClosedDay(true);
     } finally { setClosing(false); }
   };
@@ -1600,7 +1608,7 @@ export default function App() {
           {nav==="morning" && <MorningTasks closed={closed} returns={returns} tasks={tasks} setTasks={setTasks} session={session} profile={profile}/>}
           {nav==="menu"    && <MenuManager menuItems={menuItems} setMenuItems={setMenuItems} session={session} profile={profile}/>}
           {nav==="staff" && <StaffHub session={session} profile={profile}/>}
-          {nav==="summary" && <DailySummary closed={closed} returns={returns} tasks={tasks} session={session} profile={profile}/>}
+          {nav==="summary" && <DailySummary closed={closed} returns={returns} setReturns={setReturns} tasks={tasks} setTasks={setTasks} session={session} profile={profile}/>}
         </div>
 
         <div className="bottom-nav">
