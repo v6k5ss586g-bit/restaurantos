@@ -71,6 +71,19 @@ const sb = {
       method: "DELETE", headers: this.h(token),
     });
   },
+
+  async uploadImage(file, token) {
+    const ext = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${ext}`;
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/dish-returns/${fileName}`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": file.type },
+      body: file,
+    });
+    const data = await r.json();
+    if (data.Key) return `${SUPABASE_URL}/storage/v1/object/public/dish-returns/${fileName}`;
+    return null;
+  },
 };
 
 const ROLE_LABELS = { manager: "מנהל מסעדה", maitre_d: 'אחמ"ש', kitchen_manager: "מנהל מטבח", kitchen_staff: "עובד מטבח" };
@@ -529,6 +542,9 @@ function Returns({ returns, setReturns, menuItems, session, profile }) {
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState({dish_name:"",table_number:"",reason:"",notes:""});
   const [retCategory, setRetCategory] = useState("");
+  const [image, setImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const dishOptions = menuItems.length>0
     ? (retCategory ? menuItems.filter(m=>m.category===retCategory).map(m=>m.name) : [])
     : ["אסאדו בורגר","אמריקן דרים","דיוטי קומבו","קיסר סלד","ריבס"];
@@ -536,12 +552,20 @@ function Returns({ returns, setReturns, menuItems, session, profile }) {
   const submit = async () => {
     if (!f.dish_name||!f.table_number||!f.reason) return;
     setSaving(true);
-    const res = await sb.insert("dish_returns",{restaurant_id:RESTAURANT_ID,dish_name:f.dish_name,table_number:f.table_number,reason:f.reason,notes:f.notes,reported_by:profile.id},session.access_token);
+    let imageUrl = null;
+    if (image) {
+      setUploading(true);
+      imageUrl = await sb.uploadImage(image, session.access_token);
+      setUploading(false);
+    }
+    const res = await sb.insert("dish_returns",{restaurant_id:RESTAURANT_ID,dish_name:f.dish_name,table_number:f.table_number,reason:f.reason,notes:f.notes,image_url:imageUrl,reported_by:profile.id},session.access_token);
     if (res?.[0]) {
       setReturns(p=>[res[0],...p]);
       sendPush(`↩️ מנה חזרה`, `${f.dish_name} — שולחן ${f.table_number} — ${f.reason}`, session.access_token);
     }
-    setF({dish_name:"",table_number:"",reason:"",notes:""}); setShowF(false); setSaving(false);
+    setF({dish_name:"",table_number:"",reason:"",notes:""});
+    setImage(null); setImagePreview(null);
+    setShowF(false); setSaving(false);
   };
 
   const dishC={};returns.forEach(r=>{dishC[r.dish_name]=(dishC[r.dish_name]||0)+1});
@@ -578,9 +602,31 @@ function Returns({ returns, setReturns, menuItems, session, profile }) {
             </div>
             <div className="fg"><label className="fl">סיבת ההחזרה *</label><select className="fs" value={f.reason} onChange={e=>setF(p=>({...p,reason:e.target.value}))}><option value="">בחר סיבה...</option>{RETURN_R.map(r=><option key={r}>{r}</option>)}</select></div>
             <div className="fg"><label className="fl">הערות</label><textarea className="fta" value={f.notes} onChange={e=>setF(p=>({...p,notes:e.target.value}))} placeholder="תאר..."/></div>
+            <div className="fg">
+              <label className="fl">תמונה (אופציונלי)</label>
+              <input type="file" accept="image/*" capture="environment"
+                style={{display:"none"}} id="img-upload"
+                onChange={e=>{
+                  const file = e.target.files[0];
+                  if (file) {
+                    setImage(file);
+                    setImagePreview(URL.createObjectURL(file));
+                  }
+                }}
+              />
+              <label htmlFor="img-upload" style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"var(--card)",border:"1px dashed var(--brs)",borderRadius:"var(--r)",cursor:"pointer",color:"var(--ts)",fontSize:14}}>
+                📷 {imagePreview ? "תמונה נבחרה" : "צלם או העלה תמונה"}
+              </label>
+              {imagePreview && (
+                <div style={{marginTop:8,position:"relative",display:"inline-block"}}>
+                  <img src={imagePreview} style={{width:"100%",maxHeight:160,objectFit:"cover",borderRadius:"var(--r)",border:"1px solid var(--br)"}}/>
+                  <button onClick={()=>{setImage(null);setImagePreview(null);}} style={{position:"absolute",top:6,left:6,background:"rgba(0,0,0,.6)",border:"none",color:"white",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                </div>
+              )}
+            </div>
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
               <button className="btn btn-ghost" onClick={()=>setShowF(false)}>ביטול</button>
-              <button className="btn btn-primary" onClick={submit} disabled={saving||!f.dish_name||!f.table_number||!f.reason}>{saving?<span className="spin"/>:"שמור דיווח"}</button>
+              <button className="btn btn-primary" onClick={submit} disabled={saving||uploading||!f.dish_name||!f.table_number||!f.reason}>{uploading?"מעלה תמונה...":saving?<span className="spin"/>:"שמור דיווח"}</button>
             </div>
           </div>
         </div>
@@ -589,13 +635,14 @@ function Returns({ returns, setReturns, menuItems, session, profile }) {
         <div className="card">
           <div className="card-title">כל ההחזרות ({returns.length})</div>
           {returns.length===0 ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין החזרות עדיין</div>
-            : <div className="tw"><table><thead><tr>{["מנה","שולחן","סיבה","הערות","שעה"].map(t=><th key={t}>{t}</th>)}</tr></thead>
+            : <div className="tw"><table><thead><tr>{["מנה","שולחן","סיבה","הערות","תמונה","שעה"].map(t=><th key={t}>{t}</th>)}</tr></thead>
               <tbody>{returns.map(r=>(
                 <tr key={r.id}>
                   <td style={{fontWeight:600,color:"var(--tp)"}}>{r.dish_name}</td>
                   <td><span className="badge badge-neu">שולחן {r.table_number}</span></td>
                   <td><span className="badge badge-warn">{r.reason}</span></td>
                   <td style={{maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.notes||"—"}</td>
+                  <td>{r.image_url?<a href={r.image_url} target="_blank" rel="noreferrer" style={{color:"var(--accent)",fontSize:12}}>תמונה</a>:"—"}</td>
                   <td>{r.created_at?new Date(r.created_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""}</td>
                 </tr>
               ))}</tbody></table></div>}
