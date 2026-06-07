@@ -98,7 +98,7 @@ html,body{font-family:'Heebo',sans-serif;direction:rtl;background:#0f1117;color:
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--brs);border-radius:2px}
 .app{display:flex;flex-direction:column;min-height:100vh}
 .topbar{background:var(--surf);border-bottom:1px solid rgba(232,255,0,.2);box-shadow:0 1px 20px rgba(212,160,23,.08);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:50}
-.logo{font-size:16px;font-weight:100;color:var(--accent);letter-spacing:-1px}.logo-os{font-weight:900;color:white}.logo-line{display:inline-block;width:2px;height:18px;background:var(--accent);margin:0 8px 0 4px;vertical-align:middle}.logo-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin:0 6px;vertical-align:middle}
+.logo{font-size:16px;font-weight:100;color:var(--accent);letter-spacing:-1px}.logo-os{font-weight:900;color:#ffffff}.logo-line{display:inline-block;width:2px;height:18px;background:var(--accent);margin:0 10px 0 0;vertical-align:middle}.logo-dot{display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--accent);margin:0 5px 2px;vertical-align:middle}.branch{font-size:12px;font-weight:400;color:#555555;margin-right:8px}
 .logo span{color:var(--accent)}
 .branch{font-size:12px;font-weight:400;color:var(--ts);margin-right:8px}
 .nav-tabs{display:flex;gap:2px;overflow-x:auto}
