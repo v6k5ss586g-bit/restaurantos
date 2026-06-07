@@ -877,6 +877,187 @@ function MenuManager({ menuItems, setMenuItems, session, profile }) {
   );
 }
 
+
+// ── STAFF MANAGER ──
+function StaffManager({ session, profile }) {
+  const [staff, setStaff] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [showReset, setShowReset] = useState(false);
+  const [showRole, setShowRole] = useState(false);
+  const [newPass, setNewPass] = useState("");
+  const [newRole, setNewRole] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    const data = await sb.query("profiles", { select: "*", order: "created_at.asc" }, session.access_token);
+    if (Array.isArray(data)) setStaff(data);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const resetPassword = async () => {
+    if (!newPass || newPass.length < 6) return;
+    setSaving(true);
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_reset_password`, {
+        method: "POST",
+        headers: { ...sb.h(session.access_token), "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: selected.id, new_password: newPass }),
+      });
+      setShowReset(false);
+      setNewPass("");
+    } finally { setSaving(false); }
+  };
+
+  const toggleActive = async (member) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_toggle_user`, {
+      method: "POST",
+      headers: { ...sb.h(session.access_token), "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: member.id, is_active: !member.is_active }),
+    });
+    setStaff(p => p.map(s => s.id === member.id ? { ...s, is_active: !s.is_active } : s));
+  };
+
+  const changeRole = async () => {
+    if (!newRole) return;
+    setSaving(true);
+    const res = await sb.update("profiles", selected.id, { role: newRole }, session.access_token);
+    if (res?.[0]) setStaff(p => p.map(s => s.id === selected.id ? res[0] : s));
+    setShowRole(false);
+    setNewRole("");
+    setSaving(false);
+  };
+
+  const deleteStaff = async (member) => {
+    if (!window.confirm(`למחוק את ${member.full_name}?`)) return;
+    await sb.delete("profiles", member.id, session.access_token);
+    setStaff(p => p.filter(s => s.id !== member.id));
+  };
+
+  const filtered = staff.filter(s =>
+    s.full_name?.includes(search) || s.id?.includes(search)
+  );
+
+  const roleColors = {
+    manager: "badge-danger",
+    maitre_d: "badge-info",
+    kitchen_manager: "badge-warn",
+    kitchen_staff: "badge-neu",
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">ניהול עובדים</div>
+          <div className="page-sub">{staff.length} עובדים רשומים</div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={load}>רענן</button>
+      </div>
+
+      {/* Search */}
+      <div className="fg">
+        <input className="fi" placeholder="חפש עובד לפי שם..." value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+
+      {/* Reset password modal */}
+      {showReset && selected && (
+        <div className="modal-bg" onClick={e => e.target === e.currentTarget && setShowReset(false)}>
+          <div className="modal">
+            <div className="modal-title">איפוס סיסמה — {selected.full_name}</div>
+            <div className="fg">
+              <label className="fl">סיסמה חדשה (לפחות 6 תווים)</label>
+              <input className="fi" type="password" placeholder="סיסמה חדשה" value={newPass} onChange={e => setNewPass(e.target.value)} />
+            </div>
+            {newPass.length > 0 && newPass.length < 6 && <div className="err">סיסמה חייבת להכיל לפחות 6 תווים</div>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn btn-ghost" onClick={() => { setShowReset(false); setNewPass(""); }}>ביטול</button>
+              <button className="btn btn-primary" onClick={resetPassword} disabled={saving || newPass.length < 6}>{saving ? <span className="spin" /> : "אפס סיסמה"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change role modal */}
+      {showRole && selected && (
+        <div className="modal-bg" onClick={e => e.target === e.currentTarget && setShowRole(false)}>
+          <div className="modal">
+            <div className="modal-title">שינוי תפקיד — {selected.full_name}</div>
+            <div className="fg">
+              <label className="fl">תפקיד נוכחי: {ROLE_LABELS[selected.role]}</label>
+              <select className="fs" value={newRole} onChange={e => setNewRole(e.target.value)}>
+                <option value="">בחר תפקיד חדש...</option>
+                <option value="maitre_d">אחמ"ש</option>
+                <option value="kitchen_manager">מנהל מטבח</option>
+                <option value="kitchen_staff">עובד מטבח</option>
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn btn-ghost" onClick={() => { setShowRole(false); setNewRole(""); }}>ביטול</button>
+              <button className="btn btn-primary" onClick={changeRole} disabled={saving || !newRole}>{saving ? <span className="spin" /> : "שמור"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Staff list */}
+      {loading
+        ? <div className="empty"><div className="spin" style={{ width: 28, height: 28, margin: "0 auto 10px" }} /></div>
+        : filtered.map(member => (
+          <div key={member.id} className="card" style={{ marginBottom: 10, opacity: member.is_active ? 1 : 0.5 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div className="avatar" style={{ width: 38, height: 38, fontSize: 13 }}>
+                  {member.full_name?.split(" ").map(w => w[0]).join("").slice(0, 2)}
+                </div>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--tp)" }}>{member.full_name}</div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
+                    <span className={`badge ${roleColors[member.role] || "badge-neu"}`}>{ROLE_LABELS[member.role]}</span>
+                    {!member.is_active && <span className="badge badge-danger">מושבת</span>}
+                  </div>
+                </div>
+              </div>
+
+              {member.id !== profile.id && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { setSelected(member); setShowRole(true); }}>
+                    שנה תפקיד
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { setSelected(member); setShowReset(true); }}>
+                    איפוס סיסמה
+                  </button>
+                  <button
+                    className={`btn btn-sm ${member.is_active ? "btn-warn" : "btn-success"}`}
+                    onClick={() => toggleActive(member)}
+                  >
+                    {member.is_active ? "השבת" : "הפעל"}
+                  </button>
+                  <button className="btn btn-danger btn-sm" onClick={() => deleteStaff(member)}>
+                    מחק
+                  </button>
+                </div>
+              )}
+
+              {member.id === profile.id && (
+                <span className="badge badge-neu">זה אתה</span>
+              )}
+            </div>
+          </div>
+        ))
+      }
+
+      {!loading && filtered.length === 0 && (
+        <div className="card"><div className="empty">לא נמצאו עובדים</div></div>
+      )}
+    </div>
+  );
+}
+
 // ── STAFF APPROVAL ──
 function StaffApproval({ session, profile }) {
   const [pending, setPending] = useState([]);
@@ -1268,6 +1449,7 @@ export default function App() {
           {nav==="returns" && <Returns returns={returns} setReturns={setReturns} menuItems={menuItems} session={session} profile={profile}/>}
           {nav==="morning" && <MorningTasks closed={closed} returns={returns} tasks={tasks} setTasks={setTasks} session={session} profile={profile}/>}
           {nav==="menu"    && <MenuManager menuItems={menuItems} setMenuItems={setMenuItems} session={session} profile={profile}/>}
+          {nav==="employees" && <StaffManager session={session} profile={profile}/>}
           {nav==="staff"   && <StaffApproval session={session} profile={profile}/>}
           {nav==="summary" && <DailySummary closed={closed} returns={returns} tasks={tasks} session={session} profile={profile}/>}
         </div>
