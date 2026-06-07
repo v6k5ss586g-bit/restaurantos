@@ -589,18 +589,156 @@ function Returns({ returns, setReturns, menuItems, session, profile }) {
 
 // ── MORNING TASKS ──
 function MorningTasks({ closed, returns, tasks, setTasks, session, profile }) {
+  const [recurring, setRecurring] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [showManage, setShowManage] = useState(false);
+  const [newTask, setNewTask] = useState("");
+  const [newRecurring, setNewRecurring] = useState("");
+  const [saving, setSaving] = useState(false);
+  const canManage = ["manager","kitchen_manager"].includes(profile?.role);
+
+  const todayStr = new Date().toISOString().slice(0,10);
+  const yesterdayStr = new Date(Date.now()-86400000).toISOString().slice(0,10);
+
+  // Load recurring tasks
+  useEffect(()=>{
+    sb.query("recurring_tasks",{restaurant_id:`eq.${RESTAURANT_ID}`,is_active:"eq.true",select:"*"},session.access_token)
+      .then(data=>{ if(Array.isArray(data)) setRecurring(data); });
+  },[]);
+
+  // Auto-create tasks for today if none exist
+  useEffect(()=>{
+    if (tasks.length > 0) return;
+    if (!session?.access_token) return;
+
+    const createTodayTasks = async () => {
+      const toCreate = [];
+
+      // Add recurring tasks
+      recurring.forEach(r => {
+        toCreate.push({ restaurant_id: RESTAURANT_ID, text: r.text, task_type: "routine", is_done: false, task_date: todayStr });
+      });
+
+      // Add auto tasks from yesterday's closed dishes
+      const yesterdayClosed = closed.filter(d => d.closed_at?.startsWith(yesterdayStr));
+      yesterdayClosed.forEach(d => {
+        toCreate.push({ restaurant_id: RESTAURANT_ID, text: `בדוק מלאי: ${d.dish_name} (${d.reason})`, task_type: "stock", is_done: false, task_date: todayStr });
+      });
+
+      if (toCreate.length === 0) return;
+
+      const results = await Promise.all(toCreate.map(t => sb.insert("morning_tasks", t, session.access_token)));
+      const created = results.filter(r => r?.[0]).map(r => r[0]);
+      if (created.length > 0) setTasks(created);
+    };
+
+    if (recurring.length > 0 || closed.length > 0) createTodayTasks();
+  },[recurring]);
+
   const toggle = async (task) => {
-    const body = task.is_done ? {is_done:false,done_by:null,done_at:null} : {is_done:true,done_by:profile.id,done_at:new Date().toISOString()};
+    const body = task.is_done
+      ? {is_done:false,done_by:null,done_at:null}
+      : {is_done:true,done_by:profile.id,done_at:new Date().toISOString()};
     const res = await sb.update("morning_tasks",task.id,body,session.access_token);
     if (res?.[0]) setTasks(p=>p.map(t=>t.id===task.id?res[0]:t));
     else setTasks(p=>p.map(t=>t.id===task.id?{...t,...body}:t));
   };
-  const done=tasks.filter(t=>t.is_done).length;
-  const pct=tasks.length>0?Math.round((done/tasks.length)*100):0;
+
+  const addTask = async () => {
+    if (!newTask.trim()) return;
+    setSaving(true);
+    const res = await sb.insert("morning_tasks",{
+      restaurant_id: RESTAURANT_ID,
+      text: newTask,
+      task_type: "routine",
+      is_done: false,
+      task_date: todayStr,
+    }, session.access_token);
+    if (res?.[0]) setTasks(p=>[...p, res[0]]);
+    setNewTask(""); setShowAdd(false); setSaving(false);
+  };
+
+  const addRecurring = async () => {
+    if (!newRecurring.trim()) return;
+    setSaving(true);
+    const res = await sb.insert("recurring_tasks",{
+      restaurant_id: RESTAURANT_ID,
+      text: newRecurring,
+      task_type: "routine",
+      is_active: true,
+      created_by: profile.id,
+    }, session.access_token);
+    if (res?.[0]) setRecurring(p=>[...p, res[0]]);
+    setNewRecurring(""); setSaving(false);
+  };
+
+  const removeRecurring = async (id) => {
+    await sb.update("recurring_tasks", id, {is_active: false}, session.access_token);
+    setRecurring(p=>p.filter(r=>r.id!==id));
+  };
+
+  const done = tasks.filter(t=>t.is_done).length;
+  const pct = tasks.length>0 ? Math.round((done/tasks.length)*100) : 0;
+  const stockTasks = tasks.filter(t=>t.task_type==="stock");
+  const routineTasks = tasks.filter(t=>t.task_type!=="stock");
 
   return (
     <div>
-      <div style={{marginBottom:20}}><div className="page-title">משימות בוקר</div><div className="page-sub">פתיחת יום · {TODAY()}</div></div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">משימות בוקר</div>
+          <div className="page-sub">פתיחת יום · {TODAY()}</div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          {canManage && <button className="btn btn-ghost btn-sm" onClick={()=>setShowManage(true)}>ניהול משימות קבועות</button>}
+          <button className="btn btn-primary btn-sm" onClick={()=>setShowAdd(true)}>+ הוסף משימה</button>
+        </div>
+      </div>
+
+      {/* Add task modal */}
+      {showAdd && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowAdd(false)}>
+          <div className="modal">
+            <div className="modal-title">הוספת משימה להיום</div>
+            <div className="fg">
+              <label className="fl">תיאור המשימה</label>
+              <input className="fi" placeholder="למשל: בדוק מלאי לחמניות" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTask()} autoFocus/>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>setShowAdd(false)}>ביטול</button>
+              <button className="btn btn-primary" onClick={addTask} disabled={saving||!newTask.trim()}>{saving?<span className="spin"/>:"הוסף"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage recurring modal */}
+      {showManage && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowManage(false)}>
+          <div className="modal">
+            <div className="modal-title">ניהול משימות קבועות</div>
+            <div style={{marginBottom:16}}>
+              {recurring.map(r=>(
+                <div key={r.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid var(--br)"}}>
+                  <div style={{fontSize:14,color:"var(--ts)"}}>{r.text}</div>
+                  <button className="btn btn-danger btn-sm" onClick={()=>removeRecurring(r.id)}>הסר</button>
+                </div>
+              ))}
+              {recurring.length===0 && <div style={{fontSize:13,color:"var(--tm)",textAlign:"center",padding:16}}>אין משימות קבועות</div>}
+            </div>
+            <div className="fg">
+              <label className="fl">הוסף משימה קבועה חדשה</label>
+              <input className="fi" placeholder="תיאור המשימה..." value={newRecurring} onChange={e=>setNewRecurring(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addRecurring()}/>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>setShowManage(false)}>סגור</button>
+              <button className="btn btn-primary" onClick={addRecurring} disabled={saving||!newRecurring.trim()}>{saving?<span className="spin"/>:"הוסף"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Progress */}
       <div className="g2">
         <div className="card">
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
@@ -608,31 +746,59 @@ function MorningTasks({ closed, returns, tasks, setTasks, session, profile }) {
             <span className="badge badge-info">{done}/{tasks.length}</span>
           </div>
           <div className="prog-track"><div className="prog-fill" style={{width:`${pct}%`,background:pct===100?"var(--success)":"var(--accent)"}}/></div>
-          <div style={{fontSize:13,color:"var(--tm)"}}>{pct}% הושלם</div>
+          <div style={{fontSize:13,color:"var(--tm)",marginTop:4}}>{pct}% הושלם</div>
         </div>
         <div className="card">
           <div className="card-title">סיכום</div>
           <div style={{display:"flex",gap:20}}>
-            <div><div style={{fontSize:11,color:"var(--ts)",marginBottom:4}}>מנות סגורות</div><div style={{fontSize:24,fontWeight:800,color:"var(--danger)"}}>{closed.filter(d=>d.status==="closed").length}</div></div>
-            <div><div style={{fontSize:11,color:"var(--ts)",marginBottom:4}}>החזרות היום</div><div style={{fontSize:24,fontWeight:800,color:"var(--warn)"}}>{returns.length}</div></div>
-            <div><div style={{fontSize:11,color:"var(--ts)",marginBottom:4}}>משימות</div><div style={{fontSize:24,fontWeight:800,color:"var(--success)"}}>{done}/{tasks.length}</div></div>
+            <div><div style={{fontSize:11,color:"var(--ts)",marginBottom:4}}>מלאי לבדיקה</div><div style={{fontSize:24,fontWeight:800,color:"var(--warn)"}}>{stockTasks.length}</div></div>
+            <div><div style={{fontSize:11,color:"var(--ts)",marginBottom:4}}>שגרה</div><div style={{fontSize:24,fontWeight:800,color:"var(--accent)"}}>{routineTasks.length}</div></div>
+            <div><div style={{fontSize:11,color:"var(--ts)",marginBottom:4}}>בוצע</div><div style={{fontSize:24,fontWeight:800,color:"var(--success)"}}>{done}</div></div>
           </div>
         </div>
       </div>
-      <div className="card">
-        <div className="card-title">רשימת משימות</div>
-        {tasks.length===0 ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין משימות להיום</div>
-          : tasks.map(t=>(
+
+      {/* Stock tasks */}
+      {stockTasks.length>0 && (
+        <div className="card">
+          <div className="card-title" style={{color:"var(--warn)"}}>בדיקות מלאי — מאתמול</div>
+          {stockTasks.map(t=>(
             <div key={t.id} className={`task-item ${t.is_done?"done":""}`} onClick={()=>toggle(t)}>
               <div className="task-cb">{t.is_done?"✓":""}</div>
               <div className="task-text">{t.text}</div>
-              <span className={`badge ${t.task_type==="stock"?"badge-warn":"badge-neu"}`}>{t.task_type==="stock"?"מלאי":"שגרה"}</span>
+              <span className="badge badge-warn">מלאי</span>
             </div>
           ))}
-      </div>
+        </div>
+      )}
+
+      {/* Routine tasks */}
+      {routineTasks.length>0 && (
+        <div className="card">
+          <div className="card-title">משימות שגרה</div>
+          {routineTasks.map(t=>(
+            <div key={t.id} className={`task-item ${t.is_done?"done":""}`} onClick={()=>toggle(t)}>
+              <div className="task-cb">{t.is_done?"✓":""}</div>
+              <div className="task-text">{t.text}</div>
+              <span className="badge badge-neu">שגרה</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tasks.length===0 && (
+        <div className="card">
+          <div className="empty">
+            <div style={{fontSize:20,marginBottom:8}}>—</div>
+            אין משימות להיום עדיין
+            <div style={{fontSize:12,marginTop:8,color:"var(--tm)"}}>המשימות נוצרות אוטומטית בפתיחת היום</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 
 // ── MENU MANAGER ──
 function MenuManager({ menuItems, setMenuItems, session, profile }) {
