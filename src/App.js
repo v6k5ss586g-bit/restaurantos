@@ -860,6 +860,7 @@ export default function App() {
     {id:"morning",label:"משימות בוקר",  icon:"☀️"},
     {id:"menu",   label:"ניהול תפריט",  icon:"📋"},
     {id:"staff",  label:"אישור עובדים", icon:"👥",managerOnly:true},
+    {id:"summary", label:"סיכום יומי",   icon:"🌙",managerOnly:true},
   ];
 
   return (
@@ -893,6 +894,7 @@ export default function App() {
           {nav==="morning" && <MorningTasks closed={closed} returns={returns} tasks={tasks} setTasks={setTasks} session={session} profile={profile}/>}
           {nav==="menu"    && <MenuManager menuItems={menuItems} setMenuItems={setMenuItems} session={session} profile={profile}/>}
           {nav==="staff"   && <StaffApproval session={session} profile={profile}/>}
+          {nav==="summary" && <DailySummary closed={closed} returns={returns} tasks={tasks} session={session} profile={profile}/>}
         </div>
 
         <div className="bottom-nav">
