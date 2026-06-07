@@ -4,6 +4,21 @@ const SUPABASE_URL = "https://evqqxpaagsaizjrbbikn.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2cXF4cGFhZ3NhaXpqcmJiaWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1Njg3MzAsImV4cCI6MjA5NjE0NDczMH0.18AApIN7gTePCIjbRzO1TjUWLz7OlQxckqn7RoxZ2xs";
 const RESTAURANT_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
 const BRANCH_NAME = "רובן ירושלים";
+const EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-notification`;
+
+// Send push notification
+const sendPush = async (title, message, token) => {
+  try {
+    await fetch(EDGE_FUNCTION_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ title, message }),
+    });
+  } catch(e) { console.log("Push error:", e); }
+};
 
 const sb = {
   h: (token) => ({
@@ -443,7 +458,10 @@ function ClosedDishes({ closed, setClosed, menuItems, session, profile }) {
     if (!f.dish_name||!f.category||!f.reason) return;
     setSaving(true);
     const res = await sb.insert("closed_dishes",{restaurant_id:RESTAURANT_ID,dish_name:f.dish_name,category:f.category,reason:f.reason,notes:f.notes,status:"closed",closed_by:profile.id,closed_at:new Date().toISOString()},session.access_token);
-    if (res?.[0]) setClosed(p=>[res[0],...p]);
+    if (res?.[0]) {
+      setClosed(p=>[res[0],...p]);
+      sendPush(`🚫 מנה נסגרה`, `${f.dish_name} — ${f.reason}`, session.access_token);
+    }
     setF({dish_name:"",category:"",reason:"",notes:""}); setShowF(false); setSaving(false);
   };
 
@@ -519,7 +537,10 @@ function Returns({ returns, setReturns, menuItems, session, profile }) {
     if (!f.dish_name||!f.table_number||!f.reason) return;
     setSaving(true);
     const res = await sb.insert("dish_returns",{restaurant_id:RESTAURANT_ID,dish_name:f.dish_name,table_number:f.table_number,reason:f.reason,notes:f.notes,reported_by:profile.id},session.access_token);
-    if (res?.[0]) setReturns(p=>[res[0],...p]);
+    if (res?.[0]) {
+      setReturns(p=>[res[0],...p]);
+      sendPush(`↩️ מנה חזרה`, `${f.dish_name} — שולחן ${f.table_number} — ${f.reason}`, session.access_token);
+    }
     setF({dish_name:"",table_number:"",reason:"",notes:""}); setShowF(false); setSaving(false);
   };
 
