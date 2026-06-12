@@ -1757,6 +1757,198 @@ function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, p
 }
 
 
+
+// ── SHIFT LOG ──
+function ShiftLog({ session, profile }) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [f, setF] = useState({ shift_type: "", rating: 0, summary: "", incidents: "", notes_for_next: "" });
+
+  const canWrite = ["manager","maitre_d"].includes(profile?.role);
+
+  const loadLogs = async () => {
+    setLoading(true);
+    const data = await sb.query("shift_logs", {
+      restaurant_id: `eq.${RESTAURANT_ID}`,
+      select: "*",
+      order: "created_at.desc",
+      limit: 30,
+    }, session.access_token);
+    if (Array.isArray(data)) setLogs(data);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadLogs(); }, []);
+
+  const submit = async () => {
+    if (!f.shift_type || !f.summary || !f.rating) return;
+    setSaving(true);
+    const res = await sb.insert("shift_logs", {
+      restaurant_id: RESTAURANT_ID,
+      shift_date: new Date().toISOString().slice(0,10),
+      shift_type: f.shift_type,
+      rating: f.rating,
+      summary: f.summary,
+      incidents: f.incidents,
+      notes_for_next: f.notes_for_next,
+      written_by: profile.id,
+    }, session.access_token);
+    if (res?.[0]) setLogs(p => [res[0], ...p]);
+    setF({ shift_type: "", rating: 0, summary: "", incidents: "", notes_for_next: "" });
+    setShowForm(false);
+    setSaving(false);
+  };
+
+  const ratingColors = { 1: "var(--danger)", 2: "var(--warn)", 3: "#ffcc02", 4: "var(--success)", 5: "var(--accent)" };
+  const ratingLabels = { 1: "גרועה", 2: "קשה", 3: "סבירה", 4: "טובה", 5: "מצוינת" };
+  const shiftIcons = { "בוקר": "☀", "צהריים": "◑", "ערב": "◐" };
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">יומן משמרות</div>
+          <div className="page-sub">תיעוד וסיכום משמרות</div>
+        </div>
+        {canWrite && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ סכם משמרת</button>}
+      </div>
+
+      {showForm && (
+        <div className="modal-bg" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+          <div className="modal">
+            <div className="modal-title">סיכום משמרת</div>
+
+            <div className="fg">
+              <label className="fl">סוג משמרת *</label>
+              <div style={{display:"flex",gap:8}}>
+                {["בוקר","צהריים","ערב"].map(s => (
+                  <button key={s} className={`btn ${f.shift_type===s?"btn-primary":"btn-ghost"}`}
+                    style={{flex:1,justifyContent:"center"}} onClick={() => setF(p=>({...p,shift_type:s}))}>
+                    {shiftIcons[s]} {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="fg">
+              <label className="fl">דירוג המשמרת *</label>
+              <div style={{display:"flex",gap:6,marginTop:4}}>
+                {[1,2,3,4,5].map(n => (
+                  <button key={n} onClick={() => setF(p=>({...p,rating:n}))}
+                    style={{flex:1,padding:"10px 0",borderRadius:"var(--r)",border:"none",cursor:"pointer",
+                      background: f.rating>=n ? ratingColors[f.rating] : "var(--card)",
+                      color: f.rating>=n ? "white" : "var(--ts)",
+                      fontWeight:700,fontSize:16,transition:"all .2s"}}>
+                    ★
+                  </button>
+                ))}
+              </div>
+              {f.rating > 0 && <div style={{fontSize:12,color:"var(--ts)",marginTop:4,textAlign:"center"}}>{ratingLabels[f.rating]}</div>}
+            </div>
+
+            <div className="fg">
+              <label className="fl">סיכום המשמרת *</label>
+              <textarea className="fta" style={{minHeight:90}} value={f.summary}
+                onChange={e => setF(p=>({...p,summary:e.target.value}))}
+                placeholder="איך הייתה המשמרת? תאר את האווירה הכללית..."/>
+            </div>
+
+            <div className="fg">
+              <label className="fl">אירועים חריגים</label>
+              <textarea className="fta" value={f.incidents}
+                onChange={e => setF(p=>({...p,incidents:e.target.value}))}
+                placeholder="תלונות לקוחות, בעיות שירות, תקלות..."/>
+            </div>
+
+            <div className="fg">
+              <label className="fl">הערות למשמרת הבאה</label>
+              <textarea className="fta" value={f.notes_for_next}
+                onChange={e => setF(p=>({...p,notes_for_next:e.target.value}))}
+                placeholder="מה צריך לדעת? מה חשוב לבדוק?"/>
+            </div>
+
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={() => setShowForm(false)}>ביטול</button>
+              <button className="btn btn-primary" onClick={submit}
+                disabled={saving || !f.shift_type || !f.summary || !f.rating}>
+                {saving ? <span className="spin"/> : "שמור סיכום"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selected && (
+        <div className="modal-bg" onClick={e => e.target === e.currentTarget && setSelected(null)}>
+          <div className="modal">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700,color:"var(--tp)"}}>
+                  {shiftIcons[selected.shift_type]} משמרת {selected.shift_type}
+                </div>
+                <div style={{fontSize:12,color:"var(--tm)",marginTop:2}}>
+                  {new Date(selected.shift_date).toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}
+                </div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{fontSize:20,color:ratingColors[selected.rating]}}>{"★".repeat(selected.rating)}</div>
+                <button onClick={() => setSelected(null)} style={{background:"none",border:"none",color:"var(--ts)",fontSize:22,cursor:"pointer"}}>×</button>
+              </div>
+            </div>
+
+            {[
+              {label:"סיכום המשמרת", value:selected.summary},
+              {label:"אירועים חריגים", value:selected.incidents},
+              {label:"הערות למשמרת הבאה", value:selected.notes_for_next},
+            ].filter(s => s.value).map(s => (
+              <div key={s.label} style={{background:"var(--bg)",borderRadius:"var(--r)",padding:14,marginBottom:10}}>
+                <div style={{fontSize:11,color:"var(--ts)",fontWeight:600,marginBottom:6,textTransform:"uppercase",letterSpacing:1}}>{s.label}</div>
+                <div style={{fontSize:14,color:"var(--tp)",lineHeight:1.6}}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {loading
+        ? <div className="empty"><div className="spin" style={{width:28,height:28,margin:"0 auto"}}/></div>
+        : logs.length === 0
+          ? <div className="card"><div className="empty"><div style={{fontSize:20,marginBottom:8}}>—</div>אין סיכומי משמרות עדיין</div></div>
+          : logs.map(log => (
+            <div key={log.id} className="card" style={{marginBottom:10,cursor:"pointer"}} onClick={() => setSelected(log)}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{fontSize:28,lineHeight:1}}>{shiftIcons[log.shift_type]}</div>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:600,color:"var(--tp)"}}>
+                      משמרת {log.shift_type} · {new Date(log.shift_date).toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}
+                    </div>
+                    <div style={{fontSize:12,color:"var(--tm)",marginTop:2,maxWidth:260,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {log.summary}
+                    </div>
+                  </div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                  <div style={{fontSize:16,color:ratingColors[log.rating]}}>{"★".repeat(log.rating)}</div>
+                  <span style={{color:"var(--ts)",fontSize:16}}>›</span>
+                </div>
+              </div>
+              {log.notes_for_next && (
+                <div style={{marginTop:10,padding:"8px 12px",background:"var(--acc-dim)",borderRadius:"var(--r)",border:"1px solid rgba(212,160,23,.2)"}}>
+                  <div style={{fontSize:11,color:"var(--accent)",fontWeight:600,marginBottom:3}}>הערה למשמרת הבאה</div>
+                  <div style={{fontSize:13,color:"var(--ts)"}}>{log.notes_for_next}</div>
+                </div>
+              )}
+            </div>
+          ))
+      }
+    </div>
+  );
+}
+
 // ── MAIN APP ──
 export default function App() {
   const { session, profile, loading, signIn, signOut } = useAuth();
@@ -1848,6 +2040,7 @@ export default function App() {
     {id:"menu",   label:"ניהול תפריט",  icon:"≡"},
     {id:"staff",  label:"אישור עובדים", icon:"⊕",managerOnly:true},
     {id:"summary", label:"סיכום יומי",   icon:"◐",managerOnly:true},
+    {id:"shiftlog", label:"יומן משמרות",  icon:"≡"},
   ];
 
   return (
@@ -1881,6 +2074,7 @@ export default function App() {
           {nav==="morning" && <MorningTasks closed={closed} returns={returns} tasks={tasks} setTasks={setTasks} session={session} profile={profile}/>}
           {nav==="menu"    && <MenuManager menuItems={menuItems} setMenuItems={setMenuItems} session={session} profile={profile}/>}
           {nav==="staff" && <StaffHub session={session} profile={profile}/>}
+          {nav==="shiftlog" && <ShiftLog session={session} profile={profile}/>}
           {nav==="summary" && <DailySummary closed={closed} returns={returns} setReturns={setReturns} tasks={tasks} setTasks={setTasks} session={session} profile={profile} onDayClose={(closed)=>setDayClosed(closed)}/>}
         </div>
 
