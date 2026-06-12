@@ -2004,10 +2004,9 @@ function ShiftLog({ session, profile }) {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState(null);
-  const [f, setF] = useState({ shift_type: "", rating: 0, summary: "", incidents: "", notes_for_next: "" });
-
+  const [viewing, setViewing] = useState(null);  const [f, setF] = useState({ shift_type: "", rating: 0, summary: "", incidents: "", notes_for_next: "" });
   const canWrite = ["manager","maitre_d"].includes(profile?.role);
-
+  
   const loadLogs = async () => {
     setLoading(true);
     const data = await sb.query("shift_logs", {
