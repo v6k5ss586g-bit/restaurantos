@@ -89,7 +89,7 @@ const sb = {
 const ROLE_LABELS = { manager: "מנהל מסעדה", maitre_d: 'אחמ"ש', kitchen_manager: "מנהל מטבח", kitchen_staff: "עובד מטבח" };
 const CATEGORIES = ["המבורגרים","ראשונות","סלטים","בצלחת","כריכים","מנות ילדים","קינוחים","שתייה","אחר"];
 const CLOSE_R = ["חומר גלם חסר","תקלה","חוסר כוח אדם","אחר"];
-const RETURN_R = ["עשוי מדי","לא עשוי מספיק","קר","טעות בהזמנה","חסר רכיב","טעם לא תקין","תלונת לקוח","אחר"];
+const RETURN_R = ["עשוי מדי","לא עשוי מספיק","קר","טעות בהזמנה","חסר רכיב","טעם לא תקין","עצם זר","תלונת לקוח","אחר"];
 const COLORS = ["#f5a623","#4fc3f7","#ef5350","#66bb6a","#ce93d8","#80cbc4","#ffcc02","#f48fb1","#a5d6a7","#90caf9"];
 const TODAY = () => new Date().toLocaleDateString("he-IL");
 const NOW_TIME = () => new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
