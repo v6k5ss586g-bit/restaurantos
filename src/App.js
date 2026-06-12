@@ -1758,6 +1758,168 @@ function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, p
 
 
 
+
+// ── KNOWLEDGE BASE ──
+function KnowledgeBase({ session, profile }) {
+  const [docs, setDocs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [filter, setFilter] = useState("הכל");
+  const [f, setF] = useState({ title: "", category: "", description: "" });
+  const [file, setFile] = useState(null);
+
+  const canManage = ["manager","kitchen_manager"].includes(profile?.role);
+  const KB_CATEGORIES = ["נהלים","הכשרה","תפריט","בטיחות","אחר"];
+
+  const load = async () => {
+    setLoading(true);
+    const data = await sb.query("knowledge_base", {
+      restaurant_id: `eq.${RESTAURANT_ID}`,
+      select: "*",
+    }, session.access_token);
+    if (Array.isArray(data)) setDocs(data);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const uploadFile = async (file, token) => {
+    const ext = file.name.split('.').pop();
+    const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/knowledge-base/${fileName}`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": file.type },
+      body: file,
+    });
+    const data = await r.json();
+    if (data.Key) return { url: `${SUPABASE_URL}/storage/v1/object/public/knowledge-base/${fileName}`, name: file.name, type: ext };
+    return null;
+  };
+
+  const submit = async () => {
+    if (!f.title || !f.category) return;
+    setSaving(true);
+    let fileData = null;
+    if (file) fileData = await uploadFile(file, session.access_token);
+    const res = await sb.insert("knowledge_base", {
+      restaurant_id: RESTAURANT_ID,
+      title: f.title,
+      category: f.category,
+      description: f.description,
+      file_url: fileData?.url || null,
+      file_name: fileData?.name || null,
+      file_type: fileData?.type || null,
+      uploaded_by: profile.id,
+    }, session.access_token);
+    if (res?.[0]) setDocs(p => [res[0], ...p]);
+    setF({ title: "", category: "", description: "" });
+    setFile(null); setShowForm(false); setSaving(false);
+  };
+
+  const deleteDoc = async (doc) => {
+    if (!window.confirm(`למחוק את "${doc.title}"?`)) return;
+    await sb.delete("knowledge_base", doc.id, session.access_token);
+    setDocs(p => p.filter(d => d.id !== doc.id));
+  };
+
+  const fileIcons = { pdf: "📄", doc: "📝", docx: "📝", xlsx: "📊", xls: "📊", ppt: "📋", pptx: "📋", jpg: "🖼", jpeg: "🖼", png: "🖼", mp4: "🎬", mov: "🎬" };
+  const catColors = { "נהלים": "badge-info", "הכשרה": "badge-success", "תפריט": "badge-warn", "בטיחות": "badge-danger", "אחר": "badge-neu" };
+
+  const filtered = filter === "הכל" ? docs : docs.filter(d => d.category === filter);
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">מאגר ידע</div>
+          <div className="page-sub">מסמכים, נהלים והכשרות לצוות</div>
+        </div>
+        {canManage && <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ הוסף מסמך</button>}
+      </div>
+
+      {showForm && (
+        <div className="modal-bg" onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+          <div className="modal">
+            <div className="modal-title">הוספת מסמך</div>
+            <div className="fg">
+              <label className="fl">כותרת *</label>
+              <input className="fi" placeholder="שם המסמך..." value={f.title} onChange={e => setF(p=>({...p,title:e.target.value}))}/>
+            </div>
+            <div className="fg">
+              <label className="fl">קטגוריה *</label>
+              <select className="fs" value={f.category} onChange={e => setF(p=>({...p,category:e.target.value}))}>
+                <option value="">בחר קטגוריה...</option>
+                {KB_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="fg">
+              <label className="fl">תיאור</label>
+              <textarea className="fta" value={f.description} onChange={e => setF(p=>({...p,description:e.target.value}))} placeholder="במה עוסק המסמך?"/>
+            </div>
+            <div className="fg">
+              <label className="fl">קובץ (אופציונלי)</label>
+              <input type="file" id="kb-file" style={{display:"none"}} onChange={e => setFile(e.target.files[0])}
+                accept=".pdf,.doc,.docx,.xlsx,.xls,.ppt,.pptx,.jpg,.jpeg,.png,.mp4,.mov"/>
+              <label htmlFor="kb-file" style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"var(--card)",border:"1px dashed var(--brs)",borderRadius:"var(--r)",cursor:"pointer",color:"var(--ts)",fontSize:14}}>
+                📎 {file ? file.name : "בחר קובץ — PDF, Word, Excel, תמונה, וידאו"}
+              </label>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={() => setShowForm(false)}>ביטול</button>
+              <button className="btn btn-primary" onClick={submit} disabled={saving || !f.title || !f.category}>
+                {saving ? <span className="spin"/> : "שמור"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Category filter */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
+        {["הכל", ...KB_CATEGORIES].map(cat => (
+          <button key={cat} className={`btn btn-sm ${filter===cat?"btn-primary":"btn-ghost"}`} onClick={() => setFilter(cat)}>
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {loading
+        ? <div className="empty"><div className="spin" style={{width:28,height:28,margin:"0 auto"}}/></div>
+        : filtered.length === 0
+          ? <div className="card"><div className="empty"><div style={{fontSize:20,marginBottom:8}}>—</div>{filter==="הכל"?"אין מסמכים עדיין":`אין מסמכים בקטגוריה "${filter}"`}</div></div>
+          : filtered.map(doc => (
+            <div key={doc.id} className="card" style={{marginBottom:10}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+                <div style={{display:"flex",gap:12,alignItems:"flex-start",flex:1}}>
+                  <div style={{fontSize:28,flexShrink:0}}>{fileIcons[doc.file_type] || "📄"}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:15,fontWeight:700,color:"var(--tp)",marginBottom:4}}>{doc.title}</div>
+                    <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:4,flexWrap:"wrap"}}>
+                      <span className={`badge ${catColors[doc.category]||"badge-neu"}`}>{doc.category}</span>
+                      <span style={{fontSize:11,color:"var(--tm)"}}>{new Date(doc.created_at).toLocaleDateString("he-IL")}</span>
+                    </div>
+                    {doc.description && <div style={{fontSize:13,color:"var(--ts)",marginTop:4}}>{doc.description}</div>}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  {doc.file_url && (
+                    <a href={doc.file_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">
+                      פתח
+                    </a>
+                  )}
+                  {canManage && (
+                    <button className="btn btn-danger btn-sm" onClick={() => deleteDoc(doc)}>מחק</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+      }
+    </div>
+  );
+}
+
 // ── SHIFT LOG ──
 function ShiftLog({ session, profile }) {
   const [logs, setLogs] = useState([]);
@@ -2041,6 +2203,7 @@ export default function App() {
     {id:"staff",  label:"אישור עובדים", icon:"⊕",managerOnly:true},
     {id:"summary", label:"סיכום יומי",   icon:"◐",managerOnly:true},
     {id:"shiftlog", label:"יומן משמרות",  icon:"≡"},
+    {id:"kb",       label:"מאגר ידע",     icon:"◫"},
   ];
 
   return (
@@ -2075,6 +2238,7 @@ export default function App() {
           {nav==="menu"    && <MenuManager menuItems={menuItems} setMenuItems={setMenuItems} session={session} profile={profile}/>}
           {nav==="staff" && <StaffHub session={session} profile={profile}/>}
           {nav==="shiftlog" && <ShiftLog session={session} profile={profile}/>}
+          {nav==="kb" && <KnowledgeBase session={session} profile={profile}/>}
           {nav==="summary" && <DailySummary closed={closed} returns={returns} setReturns={setReturns} tasks={tasks} setTasks={setTasks} session={session} profile={profile} onDayClose={(closed)=>setDayClosed(closed)}/>}
         </div>
 
