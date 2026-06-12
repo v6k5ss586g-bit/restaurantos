@@ -1923,6 +1923,34 @@ function KnowledgeBase({ session, profile }) {
         </div>
       )}
 
+      {/* File viewer modal */}
+      {viewing && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setViewing(null)}>
+          <div style={{background:"var(--surf)",borderRadius:"var(--rl)",width:"95%",maxWidth:900,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",borderBottom:"1px solid var(--br)"}}>
+              <div style={{fontSize:15,fontWeight:700,color:"var(--tp)"}}>{viewing.title}</div>
+              <button onClick={()=>setViewing(null)} style={{background:"none",border:"none",color:"var(--ts)",fontSize:22,cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{flex:1,overflow:"hidden",minHeight:500}}>
+              {["jpg","jpeg","png"].includes(viewing.file_type) ? (
+                <img src={viewing.file_url} style={{width:"100%",height:"100%",objectFit:"contain"}} onContextMenu={e=>e.preventDefault()}/>
+              ) : viewing.file_type === "pdf" ? (
+                <iframe src={`${viewing.file_url}#toolbar=0&navpanes=0&scrollbar=0`}
+                  style={{width:"100%",height:"100%",minHeight:500,border:"none"}}
+                  title={viewing.title}
+                />
+              ) : (
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:300,gap:12,color:"var(--ts)"}}>
+                  <div style={{fontSize:48}}>{fileIcons[viewing.file_type]||"📄"}</div>
+                  <div style={{fontSize:14}}>{viewing.file_name}</div>
+                  <div style={{fontSize:12,color:"var(--tm)"}}>לא ניתן לצפות בקובץ זה ישירות</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Category filter */}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
         {["הכל", ...KB_CATEGORIES].map(cat => (
@@ -1952,9 +1980,9 @@ function KnowledgeBase({ session, profile }) {
                 </div>
                 <div style={{display:"flex",gap:6,flexShrink:0}}>
                   {doc.file_url && (
-                    <a href={doc.file_url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">
-                      פתח
-                    </a>
+                    <button className="btn btn-ghost btn-sm" onClick={()=>setViewing(doc)}>
+                      צפה
+                    </button>
                   )}
                   {canManage && (
                     <button className="btn btn-danger btn-sm" onClick={() => deleteDoc(doc)}>מחק</button>
