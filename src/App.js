@@ -1825,6 +1825,7 @@ function KnowledgeBase({ session, profile }) {
     const data = await sb.query("knowledge_base", {
       restaurant_id: `eq.${RESTAURANT_ID}`,
       select: "*",
+      order: "created_at.desc",
     }, session.access_token);
     if (Array.isArray(data)) setDocs(data);
     setLoading(false);
