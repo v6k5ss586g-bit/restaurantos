@@ -1541,7 +1541,7 @@ function CloseDayButton({ closing, closedToday, returnsToday, tasksDone, tasksTo
 }
 
 // ── DAILY SUMMARY ──
-function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, profile }) {
+function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, profile, onDayClose }) {
   const [closedDay, setClosedDay] = useState(false);
   const [closing, setClosing] = useState(false);
   const [tab, setTab] = useState("today");
@@ -1600,6 +1600,7 @@ function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, p
       // אפס משימות בוקר
       setTasks([]);
 
+      if (onDayClose) onDayClose(true);
       setClosedDay(true);
     } finally { setClosing(false); }
   };
@@ -1758,9 +1759,11 @@ export default function App() {
   const [returns, setReturns] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [dayClosed, setDayClosed] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!session?.access_token) return;
+    if (dayClosed) return;
     try {
       const [c,r,m,t] = await Promise.all([
         sb.query("closed_dishes",{restaurant_id:`eq.${RESTAURANT_ID}`,select:"*"},session.access_token),
@@ -1871,7 +1874,7 @@ export default function App() {
           {nav==="morning" && <MorningTasks closed={closed} returns={returns} tasks={tasks} setTasks={setTasks} session={session} profile={profile}/>}
           {nav==="menu"    && <MenuManager menuItems={menuItems} setMenuItems={setMenuItems} session={session} profile={profile}/>}
           {nav==="staff" && <StaffHub session={session} profile={profile}/>}
-          {nav==="summary" && <DailySummary closed={closed} returns={returns} setReturns={setReturns} tasks={tasks} setTasks={setTasks} session={session} profile={profile}/>}
+          {nav==="summary" && <DailySummary closed={closed} returns={returns} setReturns={setReturns} tasks={tasks} setTasks={setTasks} session={session} profile={profile} onDayClose={(closed)=>setDayClosed(closed)}/>}
         </div>
 
         <div className="bottom-nav">
