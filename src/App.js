@@ -387,7 +387,7 @@ function LoginScreen({ onLogin, onRegister }) {
 }
 
 // ── DASHBOARD ──
-function Dashboard({ closed, returns, dayClosed, onOpenDay }) {
+function Dashboard({ closed, returns, dayClosed, dayStatus, onOpenDay }) {
   const closedNow = closed.filter(d=>d.status==="closed").length;
   const todayStr = new Date().toISOString().slice(0,10);
   const rToday = returns.filter(r=>r.created_at?.startsWith(todayStr)).length;
@@ -406,10 +406,13 @@ function Dashboard({ closed, returns, dayClosed, onOpenDay }) {
           <div className="page-title">Dashboard</div>
           <div className="page-sub">סקירה כללית · סניף {BRANCH_NAME} · {TODAY()}</div>
         </div>
-        {dayClosed && (
+        {dayStatus === false && (
           <button className="btn btn-success" onClick={onOpenDay} style={{fontSize:15,padding:"10px 24px"}}>
-            פתח יום חדש
+            פתח יום
           </button>
+        )}
+        {dayClosed && dayStatus === true && (
+          <span className="badge badge-danger" style={{fontSize:13,padding:"8px 16px"}}>יום סגור</span>
         )}
       </div>
       {diotyCnt>=3 && <div className="alert"><div style={{fontSize:14,fontWeight:700,color:"var(--danger)"}}>!</div><div><div className="alert-title">דיוטי קומבו חזרה {diotyCnt} פעמים היום!</div><div className="alert-sub">נדרש טיפול מיידי</div></div></div>}
@@ -1490,7 +1493,7 @@ function ReportCard({ report: r }) {
 }
 
 // ── CLOSE DAY BUTTON ──
-function CloseDayButton({ closing, closedToday, returnsToday, tasksDone, tasksTotal, onConfirm }) {
+function CloseDayButton({ closing, closedToday, returnsToday, tasksDone, tasksTotal, onConfirm, isDayOpen }) {
   const [showConfirm, setShowConfirm] = useState(false);
 
   const openCount = closedToday.filter(d => d.status === "closed").length;
@@ -1548,7 +1551,7 @@ function CloseDayButton({ closing, closedToday, returnsToday, tasksDone, tasksTo
 }
 
 // ── DAILY SUMMARY ──
-function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, profile, onDayClose }) {
+function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, profile, onDayClose, isDayOpen }) {
   const [closedDay, setClosedDay] = useState(false);
   const [closing, setClosing] = useState(false);
   const [tab, setTab] = useState("today");
@@ -1597,6 +1600,20 @@ function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, p
         created_by: profile.id,
       }, session.access_token);
 
+      // עדכן סטטוס יום לסגור
+      const dsData = await sb.query("day_status", {
+        restaurant_id: `eq.${RESTAURANT_ID}`,
+        status_date: `eq.${todayStr}`,
+        select: "*",
+      }, session.access_token);
+      if (Array.isArray(dsData) && dsData.length > 0) {
+        await sb.update("day_status", dsData[0].id, {
+          is_open: false,
+          closed_by: profile.id,
+          closed_at: new Date().toISOString(),
+        }, session.access_token);
+      }
+
       // סמן את ההחזרות כ-archived בבסיס הנתונים
       const todayReturns = returns.filter(r => r.created_at?.startsWith(todayStr));
       await Promise.all(todayReturns.map(r =>
@@ -1641,6 +1658,7 @@ function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, p
           tasksDone={tasksDone}
           tasksTotal={tasksTotal}
           onConfirm={closeDay}
+          isDayOpen={isDayOpen}
         />
       </div>
 
@@ -2121,6 +2139,35 @@ export default function App() {
   const [menuItems, setMenuItems] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [dayClosed, setDayClosed] = useState(false);
+  const [dayStatus, setDayStatus] = useState(null); // null=לא ידוע, false=סגור, true=פתוח
+
+  const openDay = async () => {
+    const todayStr = new Date().toISOString().slice(0,10);
+    const existing = await sb.query("day_status", {
+      restaurant_id: `eq.${RESTAURANT_ID}`,
+      status_date: `eq.${todayStr}`,
+      select: "*",
+    }, session.access_token);
+
+    if (Array.isArray(existing) && existing.length > 0) {
+      await sb.update("day_status", existing[0].id, {
+        is_open: true,
+        opened_by: profile.id,
+        opened_at: new Date().toISOString(),
+      }, session.access_token);
+    } else {
+      await sb.insert("day_status", {
+        restaurant_id: RESTAURANT_ID,
+        status_date: todayStr,
+        is_open: true,
+        opened_by: profile.id,
+        opened_at: new Date().toISOString(),
+      }, session.access_token);
+    }
+    setDayStatus(true);
+    setDayClosed(false);
+    loadData();
+  };
 
   const loadData = useCallback(async () => {
     if (!session?.access_token) return;
@@ -2136,6 +2183,20 @@ export default function App() {
       if (Array.isArray(r)) setReturns(r);
       if (Array.isArray(m)) setMenuItems(m);
       if (Array.isArray(t)) setTasks(t);
+
+      // טען סטטוס יום
+      const todayStr = new Date().toISOString().slice(0,10);
+      const ds = await sb.query("day_status", {
+        restaurant_id: `eq.${RESTAURANT_ID}`,
+        status_date: `eq.${todayStr}`,
+        select: "*",
+      }, session.access_token);
+      if (Array.isArray(ds) && ds.length > 0) {
+        setDayStatus(ds[0].is_open);
+        if (!ds[0].is_open) setDayClosed(true);
+      } else {
+        setDayStatus(false); // יום לא נפתח עדיין
+      }
     } catch(e) { console.error(e); }
   }, [session]);
 
@@ -2231,7 +2292,7 @@ export default function App() {
           </div>
         </div>
         <div className="page">
-          {nav==="dash"    && <Dashboard closed={closed} returns={returns} dayClosed={dayClosed} onOpenDay={()=>setDayClosed(false)}/>}
+          {nav==="dash"    && <Dashboard closed={closed} returns={returns} dayClosed={dayClosed} dayStatus={dayStatus} onOpenDay={openDay}/>}
           {nav==="closed"  && <ClosedDishes closed={closed} setClosed={setClosed} menuItems={menuItems} session={session} profile={profile}/>}
           {nav==="returns" && <Returns returns={returns} setReturns={setReturns} menuItems={menuItems} session={session} profile={profile}/>}
           {nav==="morning" && <MorningTasks closed={closed} returns={returns} tasks={tasks} setTasks={setTasks} session={session} profile={profile}/>}
@@ -2239,7 +2300,7 @@ export default function App() {
           {nav==="staff" && <StaffHub session={session} profile={profile}/>}
           {nav==="shiftlog" && <ShiftLog session={session} profile={profile}/>}
           {nav==="kb" && <KnowledgeBase session={session} profile={profile}/>}
-          {nav==="summary" && <DailySummary closed={closed} returns={returns} setReturns={setReturns} tasks={tasks} setTasks={setTasks} session={session} profile={profile} onDayClose={(closed)=>setDayClosed(closed)}/>}
+          {nav==="summary" && <DailySummary closed={closed} returns={returns} setReturns={setReturns} tasks={tasks} setTasks={setTasks} session={session} profile={profile} onDayClose={(closed)=>setDayClosed(closed)} isDayOpen={dayStatus===true}/>}
         </div>
 
         <div className="bottom-nav">
