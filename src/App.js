@@ -1804,7 +1804,7 @@ function ShiftLog({ session, profile }) {
 
   const ratingColors = { 1: "var(--danger)", 2: "var(--warn)", 3: "#ffcc02", 4: "var(--success)", 5: "var(--accent)" };
   const ratingLabels = { 1: "גרועה", 2: "קשה", 3: "סבירה", 4: "טובה", 5: "מצוינת" };
-  const shiftIcons = { "בוקר": "☀", "צהריים": "◑", "ערב": "◐" };
+  const shiftIcons = { "צהריים": "◑", "ערב": "◐" };
 
   return (
     <div>
@@ -1824,7 +1824,7 @@ function ShiftLog({ session, profile }) {
             <div className="fg">
               <label className="fl">סוג משמרת *</label>
               <div style={{display:"flex",gap:8}}>
-                {["בוקר","צהריים","ערב"].map(s => (
+                {["צהריים","ערב"].map(s => (
                   <button key={s} className={`btn ${f.shift_type===s?"btn-primary":"btn-ghost"}`}
                     style={{flex:1,justifyContent:"center"}} onClick={() => setF(p=>({...p,shift_type:s}))}>
                     {shiftIcons[s]} {s}
