@@ -1,0 +1,1892 @@
+import { useState, useEffect, useCallback } from "react";
+
+const SUPABASE_URL = "https://evqqxpaagsaizjrbbikn.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2cXF4cGFhZ3NhaXpqcmJiaWtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1Njg3MzAsImV4cCI6MjA5NjE0NDczMH0.18AApIN7gTePCIjbRzO1TjUWLz7OlQxckqn7RoxZ2xs";
+const RESTAURANT_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+const BRANCH_NAME = "רובן ירושלים";
+const EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/send-notification`;
+
+// Send push notification
+const sendPush = async (title, message, token) => {
+  try {
+    await fetch(EDGE_FUNCTION_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ title, message }),
+    });
+  } catch(e) { console.log("Push error:", e); }
+};
+
+const sb = {
+  h: (token) => ({
+    "Content-Type": "application/json",
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${token || SUPABASE_ANON_KEY}`,
+  }),
+  async signIn(email, password) {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST", headers: this.h(), body: JSON.stringify({ email, password }),
+    });
+    return r.json();
+  },
+  async signUp(email, password) {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+      method: "POST", headers: this.h(), body: JSON.stringify({ email, password }),
+    });
+    return r.json();
+  },
+  async signOut(token) {
+    await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method: "POST", headers: this.h(token) });
+  },
+  async getProfile(userId, token) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=*`, { headers: this.h(token) });
+    const d = await r.json(); return d[0];
+  },
+  async query(table, params, token) {
+    const qs = Object.entries(params).map(([k,v]) => `${k}=${v}`).join("&");
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${qs}&order=created_at.desc`, { headers: this.h(token) });
+    return r.json();
+  },
+  async insert(table, body, token) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: "POST",
+      headers: { ...this.h(token), Prefer: "return=representation" },
+      body: JSON.stringify(body),
+    });
+    return r.json();
+  },
+  async update(table, id, body, token) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method: "PATCH",
+      headers: { ...this.h(token), Prefer: "return=representation" },
+      body: JSON.stringify(body),
+    });
+    return r.json();
+  },
+  async delete(table, id, token) {
+    await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method: "DELETE", headers: this.h(token),
+    });
+  },
+
+  async uploadImage(file, token) {
+    const ext = file.name.split('.').pop();
+    const fileName = `${Date.now()}.${ext}`;
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/dish-returns/${fileName}`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}`, "Content-Type": file.type },
+      body: file,
+    });
+    const data = await r.json();
+    if (data.Key) return `${SUPABASE_URL}/storage/v1/object/public/dish-returns/${fileName}`;
+    return null;
+  },
+};
+
+const ROLE_LABELS = { manager: "מנהל מסעדה", maitre_d: 'אחמ"ש', kitchen_manager: "מנהל מטבח", kitchen_staff: "עובד מטבח" };
+const CATEGORIES = ["המבורגרים","ראשונות","סלטים","בצלחת","כריכים","מנות ילדים","קינוחים","שתייה","אחר"];
+const CLOSE_R = ["חומר גלם חסר","תקלה","חוסר כוח אדם","אחר"];
+const RETURN_R = ["עשוי מדי","לא עשוי מספיק","קר","טעות בהזמנה","חסר רכיב","טעם לא תקין","עצם זר","תלונת לקוח","אחר"];
+const COLORS = ["#f5a623","#4fc3f7","#ef5350","#66bb6a","#ce93d8","#80cbc4","#ffcc02","#f48fb1","#a5d6a7","#90caf9"];
+const TODAY = () => new Date().toLocaleDateString("he-IL");
+const NOW_TIME = () => new Date().toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
+
+const css = `
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Heebo',sans-serif;direction:rtl;background:#0f1117;color:#e8eaf0;min-height:100vh}
+:root{
+  --bg:#0a0a0a;--surf:#111111;--card:#1a1a1a;--hover:#222222;
+  --accent:#d4a017;--acc-dim:rgba(212,160,23,.15);--acc2:#d4a017;
+  --danger:#ff3d3d;--danger-d:rgba(255,61,61,.15);
+  --success:#39ff14;--suc-d:rgba(57,255,20,.12);
+  --warn:#ffaa00;--warn-d:rgba(255,170,0,.12);
+  --tp:#ffffff;--ts:#aaaaaa;--tm:#555555;
+  --br:rgba(212,160,23,.12);--brs:rgba(212,160,23,.25);
+  --r:10px;--rl:14px
+}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--brs);border-radius:2px}
+.app{display:flex;flex-direction:column;min-height:100vh}
+.topbar{background:var(--surf);border-bottom:1px solid rgba(232,255,0,.2);box-shadow:0 1px 20px rgba(212,160,23,.08);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:50}
+.logo{font-size:16px;font-weight:100;color:var(--accent);letter-spacing:-1px}.logo-os{font-weight:900;color:#ffffff}.logo-line{display:inline-block;width:2px;height:18px;background:var(--accent);margin:0 10px 0 0;vertical-align:middle}.logo-dot{display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--accent);margin:0 5px 2px;vertical-align:middle}.branch{font-size:12px;font-weight:400;color:#555555;margin-right:8px}
+.logo span{color:var(--accent)}
+.branch{font-size:12px;font-weight:400;color:var(--ts);margin-right:8px}
+.nav-tabs{display:flex;gap:2px;overflow-x:auto}
+.nav-tab{padding:18px 14px;cursor:pointer;font-size:13px;font-weight:500;color:var(--ts);border-bottom:2px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:5px;transition:color .2s}
+.nav-tab:hover{color:var(--tp)}
+.nav-tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:700;text-shadow:0 0 6px rgba(212,160,23,.4)}
+.user-chip{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--card);border-radius:20px;border:1px solid var(--br);flex-shrink:0}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--accent);border:1px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000000;flex-shrink:0}
+.page{padding:20px;max-width:1080px;margin:0 auto;width:100%}
+.page-title{font-size:22px;font-weight:800;color:var(--tp)}
+.page-sub{font-size:13px;color:var(--ts);margin-top:3px}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.g4{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px}
+.g2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:20px}
+.g2c{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:500px){.g2c{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--br);border-radius:var(--rl);padding:18px;margin-bottom:16px;transition:border-color .2s}.card:hover{border-color:rgba(212,160,23,.3)}
+.card-title{font-size:15px;font-weight:700;color:var(--tp);margin-bottom:14px}
+.mcard{background:var(--card);border:1px solid var(--br);border-radius:var(--rl);padding:18px;position:relative;overflow:hidden}
+.mcard::before{content:'';position:absolute;top:0;right:0;width:3px;height:100%}
+.mcard.danger::before{background:var(--danger);box-shadow:0 0 8px var(--danger)}.mcard.warn::before{background:var(--warn);box-shadow:0 0 8px var(--warn)}.mcard.info::before{background:var(--accent);box-shadow:none}.mcard.success::before{background:var(--success);box-shadow:0 0 8px var(--success)}
+.mlabel{font-size:11px;color:var(--ts);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.mval{font-size:30px;font-weight:800;color:var(--tp);line-height:1}
+.msub{font-size:12px;color:var(--tm);margin-top:5px}
+.micon{position:absolute;bottom:12px;left:12px;font-size:30px;opacity:.12}
+.alert{background:rgba(239,83,80,.1);border:1px solid rgba(239,83,80,.3);border-radius:var(--r);padding:12px 16px;margin-bottom:12px;display:flex;gap:10px;align-items:flex-start}
+.alert.warn{background:rgba(255,167,38,.1);border-color:rgba(255,167,38,.3)}
+.alert-title{font-size:13px;color:var(--tp);font-weight:600}
+.alert-sub{font-size:12px;color:var(--ts);margin-top:2px}
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
+.badge-danger{background:var(--danger-d);color:var(--danger);border:1px solid rgba(239,83,80,.3)}
+.badge-warn{background:var(--warn-d);color:var(--warn);border:1px solid rgba(255,167,38,.3)}
+.badge-success{background:var(--suc-d);color:var(--success);border:1px solid rgba(102,187,106,.3)}
+.badge-info{background:rgba(79,195,247,.12);color:var(--acc2);border:1px solid rgba(79,195,247,.3)}
+.badge-neu{background:rgba(255,255,255,.06);color:var(--ts);border:1px solid var(--brs)}
+.nav-badge{background:var(--danger);color:white;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px}
+.btn{padding:9px 18px;border-radius:var(--r);border:none;cursor:pointer;font-family:'Heebo',sans-serif;font-size:13px;font-weight:600;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:var(--accent);color:#000000;font-weight:700}.btn-primary:hover:not(:disabled){background:#e89a1a}
+.btn-danger{background:var(--danger-d);color:var(--danger);border:1px solid var(--danger)}.btn-danger:hover:not(:disabled){background:var(--danger);color:white}
+.btn-success{background:var(--suc-d);color:var(--success);border:1px solid var(--success)}.btn-success:hover:not(:disabled){background:var(--success);color:white}
+.btn-ghost{background:transparent;color:var(--ts);border:1px solid var(--brs)}.btn-ghost:hover:not(:disabled){background:var(--hover);color:var(--tp)}
+.btn-warn{background:var(--warn-d);color:var(--warn);border:1px solid var(--warn)}.btn-warn:hover:not(:disabled){background:var(--warn);color:#1a1000}
+.btn-sm{padding:5px 12px;font-size:12px}
+.fg{margin-bottom:14px}
+.fl{font-size:13px;color:var(--ts);font-weight:500;margin-bottom:5px;display:block}
+.fi,.fs,.fta{width:100%;background:var(--card);border:1px solid var(--brs);border-radius:var(--r);padding:9px 13px;color:var(--tp);font-family:'Heebo',sans-serif;font-size:14px;direction:rtl;outline:none;transition:border-color .2s}
+.fi:focus,.fs:focus,.fta:focus{border-color:var(--accent)}
+.fta{resize:vertical;min-height:75px}
+.err{color:var(--danger);font-size:13px;margin-bottom:10px}
+.dish-item{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--surf);border:1px solid var(--br);border-radius:var(--r);margin-bottom:8px}
+.dish-item.closed{border-right:3px solid var(--danger)}
+.dish-item.open-item{border-right:3px solid var(--success)}
+.dish-name{font-size:14px;font-weight:600;color:var(--tp)}
+.dish-meta{font-size:12px;color:var(--tm);margin-top:3px}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.bar-label{font-size:13px;color:var(--ts);min-width:120px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;height:7px;background:var(--hover);border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;transition:width .6s ease}
+.bar-count{font-size:13px;font-weight:600;color:var(--tp);min-width:24px;text-align:center}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:right;padding:9px 12px;font-size:11px;font-weight:600;color:var(--tm);border-bottom:1px solid var(--br);text-transform:uppercase;letter-spacing:.5px}
+td{padding:11px 12px;border-bottom:1px solid var(--br);color:var(--ts)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--hover)}
+.tabs{display:flex;gap:3px;background:var(--surf);padding:4px;border-radius:var(--r);margin-bottom:16px;border:1px solid var(--br)}
+.tab{flex:1;text-align:center;padding:8px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;color:var(--ts);transition:all .2s}
+.tab.active{background:var(--card);color:var(--tp)}
+.task-item{display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--surf);border:1px solid var(--br);border-radius:var(--r);margin-bottom:7px;cursor:pointer}
+.task-item.done{opacity:.5}
+.task-cb{width:20px;height:20px;border-radius:6px;border:2px solid var(--brs);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:700;transition:all .2s}
+.task-item.done .task-cb{background:var(--success);border-color:var(--success);color:white}
+.task-text{flex:1;font-size:14px;color:var(--ts)}
+.task-item.done .task-text{text-decoration:line-through}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal{background:var(--surf);border:1px solid var(--brs);border-radius:var(--rl);padding:24px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto}
+.modal-title{font-size:17px;font-weight:700;margin-bottom:18px;color:var(--tp)}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);background-image:radial-gradient(circle at 20% 80%,rgba(245,166,35,.06) 0%,transparent 50%),radial-gradient(circle at 80% 20%,rgba(79,195,247,.06) 0%,transparent 50%)}
+.login-card{background:var(--surf);border:1px solid rgba(212,160,23,.25);border-radius:18px;padding:36px;width:380px;max-width:95vw;box-shadow:0 0 40px rgba(212,160,23,.08)}
+.spin{width:18px;height:18px;border:2px solid rgba(255,255,255,.2);border-top-color:white;border-radius:50%;animation:spin .6s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;color:var(--ts);font-size:15px}
+.prog-track{background:var(--hover);height:10px;border-radius:5px;overflow:hidden;margin-bottom:6px}
+.prog-fill{height:100%;border-radius:5px;transition:width .4s}
+.empty{text-align:center;padding:32px 20px;color:var(--tm);font-size:14px}
+.empty-icon{font-size:36px;margin-bottom:8px}
+@media(max-width:768px){
+  .topbar{padding:0 12px;height:50px}
+  .nav-tabs{display:none}
+  .page{padding:12px;padding-bottom:80px}
+  .branch{display:none}
+  .user-name-text{display:none}
+  .g4{grid-template-columns:1fr 1fr}
+  .g2{grid-template-columns:1fr}
+}
+.bottom-nav{display:none}
+@media(max-width:768px){
+  .bottom-nav{
+    display:flex;position:fixed;bottom:0;left:0;right:0;
+    background:var(--surf);border-top:1px solid var(--br);
+    z-index:100;padding:6px 0;padding-bottom:max(6px,env(safe-area-inset-bottom))
+  }
+  .bottom-nav-item{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+    cursor:pointer;padding:4px 0;position:relative;
+    color:var(--ts);font-size:10px;font-weight:500;transition:color .2s
+  }
+  .bottom-nav-item.active{color:var(--accent);filter:drop-shadow(0 0 4px rgba(212,160,23,.5))}
+  .bottom-nav-icon{font-size:22px;line-height:1}
+  .bottom-nav-badge{
+    position:absolute;top:2px;right:calc(50% - 18px);
+    background:var(--danger);color:white;
+    font-size:10px;font-weight:700;padding:1px 5px;border-radius:8px;min-width:16px;text-align:center
+  }
+}
+`;
+
+// ── AUTH ──
+function useAuth() {
+  const [session, setSession] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("ros_session") || "null"); } catch { return null; }
+  });
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (session?.access_token && !profile) {
+      setLoading(true);
+      sb.getProfile(session.user?.id, session.access_token)
+        .then(p => setProfile(p))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }
+  }, [session]);
+
+  const signIn = async (email, password) => {
+    const data = await sb.signIn(email, password);
+    if (data.error || !data.access_token) throw new Error("אימייל או סיסמה שגויים");
+    localStorage.setItem("ros_session", JSON.stringify(data));
+    setSession(data);
+    const p = await sb.getProfile(data.user.id, data.access_token);
+    if (!p) throw new Error("משתמש לא מאושר עדיין — פנה למנהל");
+    setProfile(p);
+    return p;
+  };
+
+  const signOut = async () => {
+    if (session?.access_token) await sb.signOut(session.access_token);
+    localStorage.removeItem("ros_session");
+    setSession(null); setProfile(null);
+  };
+
+  return { session, profile, loading, signIn, signOut };
+}
+
+// ── REGISTER ──
+function RegisterScreen({ onBack }) {
+  const [f, setF] = useState({ name:"", email:"", password:"", password2:"", role:"" });
+  const [showRegPass, setShowRegPass] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const handle = async () => {
+    if (!f.name||!f.email||!f.password||!f.role) { setErr("יש למלא את כל השדות"); return; }
+    if (f.password !== f.password2) { setErr("הסיסמאות אינן תואמות"); return; }
+    if (f.password.length < 6) { setErr("סיסמה חייבת להכיל לפחות 6 תווים"); return; }
+    setLoading(true); setErr("");
+    try {
+      const data = await sb.signUp(f.email, f.password);
+      if (data.error) throw new Error(data.error.message);
+      const userId = data.user?.id;
+      if (!userId) throw new Error("שגיאה ביצירת המשתמש");
+      await sb.insert("pending_staff", {
+        user_id: userId, full_name: f.name, email: f.email,
+        role: f.role, restaurant_id: RESTAURANT_ID, status: "pending",
+      }, SUPABASE_ANON_KEY);
+      setSuccess(true);
+    } catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+
+  if (success) return (
+    <div className="login-wrap">
+      <div className="login-card" style={{textAlign:"center"}}>
+        <div style={{fontSize:48,marginBottom:16}}>✅</div>
+        <div style={{fontSize:20,fontWeight:800,color:"var(--tp)",marginBottom:8}}>הבקשה נשלחה!</div>
+        <div style={{fontSize:14,color:"var(--ts)",marginBottom:24}}>המנהל יאשר את הגישה שלך בקרוב.</div>
+        <button className="btn btn-ghost" style={{width:"100%",justifyContent:"center"}} onClick={onBack}>חזור להתחברות</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="login-wrap">
+      <div className="login-card">
+        <div style={{textAlign:"center",marginBottom:24}}>
+          
+          <div style={{fontSize:20,fontWeight:800,color:"var(--tp)"}}>הרשמה לצוות</div>
+          <div style={{fontSize:13,color:"var(--ts)",marginTop:4}}>סניף {BRANCH_NAME}</div>
+        </div>
+        <div className="fg"><label className="fl">שם מלא *</label><input className="fi" placeholder="שם פרטי ומשפחה" value={f.name} onChange={e=>setF(p=>({...p,name:e.target.value}))} /></div>
+        <div className="fg"><label className="fl">אימייל *</label><input className="fi" type="email" placeholder="your@email.com" value={f.email} onChange={e=>setF(p=>({...p,email:e.target.value}))} /></div>
+        <div className="fg">
+          <label className="fl">תפקיד *</label>
+          <select className="fs" value={f.role} onChange={e=>setF(p=>({...p,role:e.target.value}))}>
+            <option value="">בחר תפקיד...</option>
+            <option value="maitre_d">אחמ"ש</option>
+            <option value="kitchen_manager">מנהל מטבח</option>
+            <option value="kitchen_staff">עובד מטבח</option>
+          </select>
+        </div>
+        <div className="fg"><label className="fl">סיסמה *</label>
+          <div style={{position:"relative"}}>
+            <input className="fi" type={showRegPass?"text":"password"} placeholder="לפחות 6 תווים" value={f.password} onChange={e=>setF(p=>({...p,password:e.target.value}))} style={{paddingLeft:40}}/>
+            <button onClick={()=>setShowRegPass(p=>!p)} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"var(--ts)",fontSize:16,padding:4}}>{showRegPass?"🙈":"👁️"}</button>
+          </div>
+        </div>
+        <div className="fg"><label className="fl">אימות סיסמה *</label><input className="fi" type={showRegPass?"text":"password"} placeholder="חזור על הסיסמה" value={f.password2} onChange={e=>setF(p=>({...p,password2:e.target.value}))} /></div>
+        {err && <div className="err">{err}</div>}
+        <button className="btn btn-primary" style={{width:"100%",justifyContent:"center",marginBottom:10}} onClick={handle} disabled={loading}>
+          {loading ? <span className="spin"/> : "שלח בקשת הצטרפות"}
+        </button>
+        <button className="btn btn-ghost" style={{width:"100%",justifyContent:"center"}} onClick={onBack}>חזור להתחברות</button>
+        <div style={{marginTop:12,fontSize:12,color:"var(--tm)",textAlign:"center"}}>הבקשה תועבר לאישור המנהל</div>
+      </div>
+    </div>
+  );
+}
+
+// ── LOGIN ──
+function LoginScreen({ onLogin, onRegister }) {
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  const handle = async () => {
+    if (!email||!pass) { setErr("מלא אימייל וסיסמה"); return; }
+    setLoading(true); setErr("");
+    try { await onLogin(email, pass); }
+    catch(e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="login-wrap">
+      <div className="login-card">
+        <div style={{textAlign:"center",marginBottom:28}}>
+          
+          <div style={{fontSize:28,fontWeight:100,color:"var(--accent)",letterSpacing:-1}}>FLOW<span style={{display:"inline-block",width:5,height:5,borderRadius:"50%",background:"var(--accent)",margin:"0 6px 4px",verticalAlign:"middle"}}></span><span style={{fontWeight:900,color:"white"}}>OS</span></div>
+          <div style={{fontSize:13,color:"var(--ts)",marginTop:4}}>סניף {BRANCH_NAME}</div>
+        </div>
+        <div className="fg"><label className="fl">אימייל</label><input className="fi" type="email" value={email} onChange={e=>{setEmail(e.target.value);setErr("")}} /></div>
+        <div className="fg"><label className="fl">סיסמה</label>
+          <div style={{position:"relative"}}>
+            <input className="fi" type={showPass?"text":"password"} value={pass} onChange={e=>{setPass(e.target.value);setErr("")}} onKeyDown={e=>e.key==="Enter"&&handle()} style={{paddingLeft:40}}/>
+            <button onClick={()=>setShowPass(p=>!p)} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"var(--ts)",fontSize:16,padding:4}}>{showPass?"🙈":"👁️"}</button>
+          </div>
+        </div>
+        {err && <div className="err">{err}</div>}
+        <button className="btn btn-primary" style={{width:"100%",justifyContent:"center",fontSize:15,padding:"11px 0",marginBottom:10}} onClick={handle} disabled={loading}>
+          {loading ? <span className="spin"/> : "כניסה למערכת"}
+        </button>
+        <button className="btn btn-ghost" style={{width:"100%",justifyContent:"center"}} onClick={onRegister}>
+          עובד חדש? הירשם כאן
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── DASHBOARD ──
+function Dashboard({ closed, returns }) {
+  const closedNow = closed.filter(d=>d.status==="closed").length;
+  const todayStr = new Date().toISOString().slice(0,10);
+  const rToday = returns.filter(r=>r.created_at?.startsWith(todayStr)).length;
+  const dishC={};returns.forEach(r=>{dishC[r.dish_name]=(dishC[r.dish_name]||0)+1});
+  const top5=Object.entries(dishC).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const maxD=top5[0]?.[1]||1;
+  const reaC={};returns.forEach(r=>{reaC[r.reason]=(reaC[r.reason]||0)+1});
+  const topR=Object.entries(reaC).sort((a,b)=>b[1]-a[1]);
+  const maxR=topR[0]?.[1]||1;
+  const diotyCnt=returns.filter(r=>r.dish_name==="דיוטי קומבו"&&r.created_at?.startsWith(todayStr)).length;
+
+  return (
+    <div>
+      <div style={{marginBottom:20}}>
+        <div className="page-title">Dashboard</div>
+        <div className="page-sub">סקירה כללית · סניף {BRANCH_NAME} · {TODAY()}</div>
+      </div>
+      {diotyCnt>=3 && <div className="alert"><div style={{fontSize:14,fontWeight:700,color:"var(--danger)"}}>!</div><div><div className="alert-title">דיוטי קומבו חזרה {diotyCnt} פעמים היום!</div><div className="alert-sub">נדרש טיפול מיידי</div></div></div>}
+      {closedNow>=2 && <div className="alert warn"><div style={{fontSize:14,fontWeight:700,color:"var(--warn)"}}>!</div><div><div className="alert-title">{closedNow} מנות סגורות כרגע</div><div className="alert-sub">עדכן את הצוות</div></div></div>}
+      <div className="g4">
+        {[
+          {label:"מנות סגורות כרגע",val:closedNow,sub:"ממתינות לפתיחה",icon:"⊘",cls:"danger"},
+          {label:"החזרות היום",val:rToday,sub:"מנות שחזרו",icon:"↩",cls:"warn"},
+          {label:"סה״כ החזרות",val:returns.length,sub:"כל הזמנים",icon:"◈",cls:"info"},
+          {label:"אחוז החזרות",val:"–",sub:"מסך ההזמנות",icon:"📈",cls:"success"},
+        ].map(m=>(
+          <div key={m.label} className={`mcard ${m.cls}`}>
+            <div className="mlabel">{m.label}</div>
+            <div className="mval">{m.val}</div>
+            <div className="msub">{m.sub}</div>
+            <div className="micon">{m.icon}</div>
+          </div>
+        ))}
+      </div>
+      <div className="g2">
+        <div className="card">
+          <div className="card-title">Top 5 מנות שחזרו</div>
+          {top5.length===0 ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין החזרות</div>
+            : top5.map(([dish,cnt],i)=>(
+              <div key={dish} className="bar-row">
+                <div className="bar-label">{dish}</div>
+                <div className="bar-track"><div className="bar-fill" style={{width:`${(cnt/maxD)*100}%`,background:COLORS[i]}}/></div>
+                <div className="bar-count">{cnt}</div>
+              </div>
+            ))}
+        </div>
+        <div className="card">
+          <div className="card-title">סיבות החזרה</div>
+          {topR.map(([r,cnt],i)=>(
+            <div key={r} className="bar-row">
+              <div className="bar-label">{r}</div>
+              <div className="bar-track"><div className="bar-fill" style={{width:`${(cnt/maxR)*100}%`,background:COLORS[i%10]}}/></div>
+              <div className="bar-count">{cnt}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-title">מנות סגורות עכשיו</div>
+        {closed.filter(d=>d.status==="closed").length===0
+          ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>כל המנות פתוחות</div>
+          : closed.filter(d=>d.status==="closed").map(d=>(
+            <div key={d.id} className="dish-item closed">
+              <div><div className="dish-name">{d.dish_name}</div><div className="dish-meta">{d.reason} · {d.closed_at?new Date(d.closed_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""}</div></div>
+              <span className="badge badge-danger">סגור</span>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+// ── CLOSED DISHES ──
+function ClosedDishes({ closed, setClosed, menuItems, session, profile }) {
+  const [showF, setShowF] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [f, setF] = useState({dish_name:"",category:"",reason:"",notes:""});
+  const dishOptions = menuItems.length>0
+    ? (f.category ? menuItems.filter(m=>m.category===f.category).map(m=>m.name) : [])
+    : ["אסאדו בורגר","אמריקן דרים","דיוטי קומבו","קיסר סלד","ריבס"];
+
+  const doClose = async () => {
+    if (!f.dish_name||!f.category||!f.reason) return;
+    setSaving(true);
+    const res = await sb.insert("closed_dishes",{restaurant_id:RESTAURANT_ID,dish_name:f.dish_name,category:f.category,reason:f.reason,notes:f.notes,status:"closed",closed_by:profile.id,closed_at:new Date().toISOString()},session.access_token);
+    if (res?.[0]) {
+      setClosed(p=>[res[0],...p]);
+      sendPush(`🚫 מנה נסגרה`, `${f.dish_name} — ${f.reason}`, session.access_token);
+    }
+    setF({dish_name:"",category:"",reason:"",notes:""}); setShowF(false); setSaving(false);
+  };
+
+  const reopen = async (id) => {
+    const res = await sb.update("closed_dishes",id,{status:"open",reopened_by:profile.id,reopened_at:new Date().toISOString()},session.access_token);
+    if (res?.[0]) setClosed(p=>p.map(d=>d.id===id?res[0]:d));
+  };
+
+  const active=closed.filter(d=>d.status==="closed");
+  const done=closed.filter(d=>d.status==="open");
+
+  return (
+    <div>
+      <div className="page-header">
+        <div><div className="page-title">סגירת מנות</div><div className="page-sub">דיווח ומעקב מנות שאינן זמינות</div></div>
+        <button className="btn btn-danger" onClick={()=>setShowF(true)}>+ סגור מנה</button>
+      </div>
+      {showF && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowF(false)}>
+          <div className="modal">
+            <div className="modal-title">🚫 סגירת מנה</div>
+            <div className="fg"><label className="fl">קטגוריה *</label><select className="fs" value={f.category} onChange={e=>setF(p=>({...p,category:e.target.value,dish_name:""}))}><option value="">בחר קטגוריה...</option>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></div>
+            <div className="fg"><label className="fl">שם המנה *</label><select className="fs" value={f.dish_name} onChange={e=>setF(p=>({...p,dish_name:e.target.value}))} disabled={!f.category}><option value="">{f.category?"בחר מנה...":"קודם בחר קטגוריה"}</option>{dishOptions.map(m=><option key={m}>{m}</option>)}</select></div>
+            <div className="fg"><label className="fl">סיבת הסגירה *</label><select className="fs" value={f.reason} onChange={e=>setF(p=>({...p,reason:e.target.value}))}><option value="">בחר סיבה...</option>{CLOSE_R.map(r=><option key={r}>{r}</option>)}</select></div>
+            <div className="fg"><label className="fl">הערות</label><textarea className="fta" value={f.notes} onChange={e=>setF(p=>({...p,notes:e.target.value}))} placeholder="פרט..."/></div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>setShowF(false)}>ביטול</button>
+              <button className="btn btn-danger" onClick={doClose} disabled={saving||!f.dish_name||!f.category||!f.reason}>{saving?<span className="spin"/>:"סגור מנה"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="card">
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+          <div className="card-title" style={{margin:0}}>מנות סגורות כרגע</div>
+          <span className="badge badge-danger">{active.length}</span>
+        </div>
+        {active.length===0 ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין מנות סגורות</div>
+          : active.map(d=>(
+            <div key={d.id} className="dish-item closed">
+              <div><div className="dish-name">{d.dish_name}</div><div className="dish-meta">{d.category} · {d.reason}{d.notes?` · ${d.notes}`:""}</div></div>
+              <button className="btn btn-success btn-sm" onClick={()=>reopen(d.id)}>החזר לתפריט</button>
+            </div>
+          ))}
+      </div>
+      {done.length>0 && (
+        <div className="card">
+          <div className="card-title">חזרו לתפריט</div>
+          {done.map(d=>(
+            <div key={d.id} className="dish-item open-item" style={{opacity:.7}}>
+              <div><div className="dish-name">{d.dish_name}</div><div className="dish-meta">נסגר · {d.closed_at?new Date(d.closed_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""} · נפתח · {d.reopened_at?new Date(d.reopened_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):"—"}</div></div>
+              <span className="badge badge-success">פתוח</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── RETURNS ──
+function Returns({ returns, setReturns, menuItems, session, profile }) {
+  const [showF, setShowF] = useState(false);
+  const [tab, setTab] = useState("list");
+  const [saving, setSaving] = useState(false);
+  const [f, setF] = useState({dish_name:"",table_number:"",reason:"",notes:""});
+  const [retCategory, setRetCategory] = useState("");
+  const [image, setImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [selectedReturn, setSelectedReturn] = useState(null);
+  const dishOptions = menuItems.length>0
+    ? (retCategory ? menuItems.filter(m=>m.category===retCategory).map(m=>m.name) : [])
+    : ["אסאדו בורגר","אמריקן דרים","דיוטי קומבו","קיסר סלד","ריבס"];
+
+  const submit = async () => {
+    if (!f.dish_name||!f.table_number||!f.reason) return;
+    setSaving(true);
+    let imageUrl = null;
+    if (image) {
+      setUploading(true);
+      imageUrl = await sb.uploadImage(image, session.access_token);
+      setUploading(false);
+    }
+    const res = await sb.insert("dish_returns",{restaurant_id:RESTAURANT_ID,dish_name:f.dish_name,table_number:f.table_number,reason:f.reason,notes:f.notes,image_url:imageUrl,reported_by:profile.id},session.access_token);
+    if (res?.[0]) {
+      setReturns(p=>[res[0],...p]);
+      sendPush(`↩️ מנה חזרה`, `${f.dish_name} — שולחן ${f.table_number} — ${f.reason}`, session.access_token);
+    }
+    setF({dish_name:"",table_number:"",reason:"",notes:""});
+    setImage(null); setImagePreview(null);
+    setShowF(false); setSaving(false);
+  };
+
+  const dishC={};returns.forEach(r=>{dishC[r.dish_name]=(dishC[r.dish_name]||0)+1});
+  const top10=Object.entries(dishC).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const maxD=top10[0]?.[1]||1;
+  const reaC={};returns.forEach(r=>{reaC[r.reason]=(reaC[r.reason]||0)+1});
+  const topR=Object.entries(reaC).sort((a,b)=>b[1]-a[1]);
+  const maxR=topR[0]?.[1]||1;
+  const alerts=top10.filter(([,c])=>c>=3).map(([dish,count])=>({dish,count}));
+
+  return (
+    <div>
+      <div className="page-header">
+        <div><div className="page-title">מנות שחזרו</div><div className="page-sub">מעקב וזיהוי בעיות חוזרות</div></div>
+        <button className="btn btn-warn" onClick={()=>setShowF(true)}>+ דווח החזרה</button>
+      </div>
+      {alerts.map(a=>(
+        <div key={a.dish} className="alert"><div style={{fontSize:14,fontWeight:700,color:"var(--danger)"}}>!</div><div><div className="alert-title">{a.dish} חזרה {a.count} פעמים!</div><div className="alert-sub">מנה בעייתית – נדרש בדיקה</div></div></div>
+      ))}
+      {selectedReturn && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setSelectedReturn(null)}>
+          <div className="modal">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div className="modal-title" style={{margin:0}}>{selectedReturn.dish_name}</div>
+              <button onClick={()=>setSelectedReturn(null)} style={{background:"none",border:"none",color:"var(--ts)",fontSize:20,cursor:"pointer"}}>×</button>
+            </div>
+            {selectedReturn.image_url && (
+              <img src={selectedReturn.image_url} style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:"var(--r)",marginBottom:14,border:"1px solid var(--br)"}}/>
+            )}
+            <div style={{background:"var(--bg)",borderRadius:"var(--r)",padding:14,marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>שולחן</span>
+                <span style={{color:"var(--tp)",fontWeight:600}}>שולחן {selectedReturn.table_number}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>סיבה</span>
+                <span className="badge badge-warn">{selectedReturn.reason}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>מדווח</span>
+                <span style={{color:"var(--tp)",fontSize:13}}>{selectedReturn.reported_by_name||"—"}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>שעה</span>
+                <span style={{color:"var(--tp)",fontSize:13}}>{selectedReturn.created_at?new Date(selectedReturn.created_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""}</span>
+              </div>
+            </div>
+            {selectedReturn.notes && (
+              <div style={{background:"var(--bg)",borderRadius:"var(--r)",padding:14}}>
+                <div style={{fontSize:12,color:"var(--ts)",marginBottom:6}}>הערות</div>
+                <div style={{fontSize:14,color:"var(--tp)"}}>{selectedReturn.notes}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="tabs">
+        {[["list","רשימת החזרות"],["analysis","ניתוח נתונים"]].map(([id,label])=>(
+          <div key={id} className={`tab ${tab===id?"active":""}`} onClick={()=>setTab(id)}>{label}</div>
+        ))}
+      </div>
+      {showF && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowF(false)}>
+          <div className="modal">
+            <div className="modal-title">↩️ דיווח החזרת מנה</div>
+            <div className="fg"><label className="fl">קטגוריה</label><select className="fs" value={retCategory} onChange={e=>{setRetCategory(e.target.value);setF(p=>({...p,dish_name:""}));}}><option value="">בחר קטגוריה...</option>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></div>
+            <div className="fg"><label className="fl">שם המנה *</label><select className="fs" value={f.dish_name} onChange={e=>setF(p=>({...p,dish_name:e.target.value}))} disabled={!retCategory}><option value="">{retCategory?"בחר מנה...":"קודם בחר קטגוריה"}</option>{dishOptions.map(m=><option key={m}>{m}</option>)}</select></div>
+            <div className="g2c" style={{marginBottom:14}}>
+              <div><label className="fl">שולחן *</label><input className="fi" type="number" placeholder="7" value={f.table_number} onChange={e=>setF(p=>({...p,table_number:e.target.value}))}/></div>
+              <div><label className="fl">מדווח</label><input className="fi" value={profile?.full_name||""} readOnly style={{opacity:.6}}/></div>
+            </div>
+            <div className="fg"><label className="fl">סיבת ההחזרה *</label><select className="fs" value={f.reason} onChange={e=>setF(p=>({...p,reason:e.target.value}))}><option value="">בחר סיבה...</option>{RETURN_R.map(r=><option key={r}>{r}</option>)}</select></div>
+            <div className="fg"><label className="fl">הערות</label><textarea className="fta" value={f.notes} onChange={e=>setF(p=>({...p,notes:e.target.value}))} placeholder="תאר..."/></div>
+            <div className="fg">
+              <label className="fl">תמונה (אופציונלי)</label>
+              <input type="file" accept="image/*" capture="environment"
+                style={{display:"none"}} id="img-upload"
+                onChange={e=>{
+                  const file = e.target.files[0];
+                  if (file) {
+                    setImage(file);
+                    setImagePreview(URL.createObjectURL(file));
+                  }
+                }}
+              />
+              <label htmlFor="img-upload" style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"var(--card)",border:"1px dashed var(--brs)",borderRadius:"var(--r)",cursor:"pointer",color:"var(--ts)",fontSize:14}}>
+                📷 {imagePreview ? "תמונה נבחרה" : "צלם או העלה תמונה"}
+              </label>
+              {imagePreview && (
+                <div style={{marginTop:8,position:"relative",display:"inline-block"}}>
+                  <img src={imagePreview} style={{width:"100%",maxHeight:160,objectFit:"cover",borderRadius:"var(--r)",border:"1px solid var(--br)"}}/>
+                  <button onClick={()=>{setImage(null);setImagePreview(null);}} style={{position:"absolute",top:6,left:6,background:"rgba(0,0,0,.6)",border:"none",color:"white",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                </div>
+              )}
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>setShowF(false)}>ביטול</button>
+              <button className="btn btn-primary" onClick={submit} disabled={saving||uploading||!f.dish_name||!f.table_number||!f.reason}>{uploading?"מעלה תמונה...":saving?<span className="spin"/>:"שמור דיווח"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {tab==="list" && (
+        <div className="card">
+          <div className="card-title">כל ההחזרות ({returns.length})</div>
+          {returns.length===0 ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין החזרות עדיין</div>
+            : <div className="tw"><table><thead><tr>{["מנה","שולחן","סיבה","הערות","תמונה","שעה"].map(t=><th key={t}>{t}</th>)}</tr></thead>
+              <tbody>{returns.map(r=>(
+                <tr key={r.id}>
+                  <td style={{fontWeight:600,color:"var(--tp)"}}>{r.dish_name}</td>
+                  <td><span className="badge badge-neu">שולחן {r.table_number}</span></td>
+                  <td><span className="badge badge-warn">{r.reason}</span></td>
+                  <td style={{maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.notes||"—"}</td>
+                  <td>{r.image_url?<a href={r.image_url} target="_blank" rel="noreferrer" style={{color:"var(--accent)",fontSize:12}}>תמונה</a>:"—"}</td>
+                  <td>{r.created_at?new Date(r.created_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""}</td>
+                </tr>
+              ))}</tbody></table></div>}
+        </div>
+      )}
+      {tab==="analysis" && (
+        <div className="g2">
+          <div className="card"><div className="card-title">Top 10 מנות</div>{top10.map(([dish,cnt],i)=><div key={dish} className="bar-row"><div className="bar-label">{dish}</div><div className="bar-track"><div className="bar-fill" style={{width:`${(cnt/maxD)*100}%`,background:COLORS[i%10]}}/></div><div className="bar-count">{cnt}</div></div>)}</div>
+          <div className="card"><div className="card-title">סיבות החזרה</div>{topR.map(([r,cnt],i)=><div key={r} className="bar-row"><div className="bar-label">{r}</div><div className="bar-track"><div className="bar-fill" style={{width:`${(cnt/maxR)*100}%`,background:COLORS[i%10]}}/></div><div className="bar-count">{cnt}</div></div>)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MORNING TASKS ──
+function MorningTasks({ closed, returns, tasks, setTasks, session, profile }) {
+  const [recurring, setRecurring] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [showManage, setShowManage] = useState(false);
+  const [newTask, setNewTask] = useState("");
+  const [newRecurring, setNewRecurring] = useState("");
+  const [saving, setSaving] = useState(false);
+  const canManage = ["manager","kitchen_manager"].includes(profile?.role);
+
+  const todayStr = new Date().toISOString().slice(0,10);
+  const yesterdayStr = new Date(Date.now()-86400000).toISOString().slice(0,10);
+
+  // Load recurring tasks
+  useEffect(()=>{
+    sb.query("recurring_tasks",{restaurant_id:`eq.${RESTAURANT_ID}`,is_active:"eq.true",select:"*"},session.access_token)
+      .then(data=>{ if(Array.isArray(data)) setRecurring(data); });
+  },[]);
+
+  // Auto-create tasks for today if none exist
+  useEffect(()=>{
+    if (tasks.length > 0) return;
+    if (!session?.access_token) return;
+
+    const createTodayTasks = async () => {
+      const toCreate = [];
+
+      // Add recurring tasks
+      recurring.forEach(r => {
+        toCreate.push({ restaurant_id: RESTAURANT_ID, text: r.text, task_type: "routine", is_done: false, task_date: todayStr });
+      });
+
+      // Add auto tasks from yesterday's closed dishes
+      const yesterdayClosed = closed.filter(d => d.closed_at?.startsWith(yesterdayStr));
+      yesterdayClosed.forEach(d => {
+        toCreate.push({ restaurant_id: RESTAURANT_ID, text: `בדוק מלאי: ${d.dish_name} (${d.reason})`, task_type: "stock", is_done: false, task_date: todayStr });
+      });
+
+      if (toCreate.length === 0) return;
+
+      const results = await Promise.all(toCreate.map(t => sb.insert("morning_tasks", t, session.access_token)));
+      const created = results.filter(r => r?.[0]).map(r => r[0]);
+      if (created.length > 0) setTasks(created);
+    };
+
+    if (recurring.length > 0 || closed.length > 0) createTodayTasks();
+  },[recurring]);
+
+  const toggle = async (task) => {
+    const body = task.is_done
+      ? {is_done:false,done_by:null,done_at:null}
+      : {is_done:true,done_by:profile.id,done_at:new Date().toISOString()};
+    const res = await sb.update("morning_tasks",task.id,body,session.access_token);
+    if (res?.[0]) setTasks(p=>p.map(t=>t.id===task.id?res[0]:t));
+    else setTasks(p=>p.map(t=>t.id===task.id?{...t,...body}:t));
+  };
+
+  const addTask = async () => {
+    if (!newTask.trim()) return;
+    setSaving(true);
+    const res = await sb.insert("morning_tasks",{
+      restaurant_id: RESTAURANT_ID,
+      text: newTask,
+      task_type: "routine",
+      is_done: false,
+      task_date: todayStr,
+    }, session.access_token);
+    if (res?.[0]) setTasks(p=>[...p, res[0]]);
+    setNewTask(""); setShowAdd(false); setSaving(false);
+  };
+
+  const addRecurring = async () => {
+    if (!newRecurring.trim()) return;
+    setSaving(true);
+    const res = await sb.insert("recurring_tasks",{
+      restaurant_id: RESTAURANT_ID,
+      text: newRecurring,
+      task_type: "routine",
+      is_active: true,
+      created_by: profile.id,
+    }, session.access_token);
+    if (res?.[0]) setRecurring(p=>[...p, res[0]]);
+    setNewRecurring(""); setSaving(false);
+  };
+
+  const removeRecurring = async (id) => {
+    await sb.update("recurring_tasks", id, {is_active: false}, session.access_token);
+    setRecurring(p=>p.filter(r=>r.id!==id));
+  };
+
+  const done = tasks.filter(t=>t.is_done).length;
+  const pct = tasks.length>0 ? Math.round((done/tasks.length)*100) : 0;
+  const stockTasks = tasks.filter(t=>t.task_type==="stock");
+  const routineTasks = tasks.filter(t=>t.task_type!=="stock");
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">משימות בוקר</div>
+          <div className="page-sub">פתיחת יום · {TODAY()}</div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          {canManage && <button className="btn btn-ghost btn-sm" onClick={()=>setShowManage(true)}>ניהול משימות קבועות</button>}
+          <button className="btn btn-primary btn-sm" onClick={()=>setShowAdd(true)}>+ הוסף משימה</button>
+        </div>
+      </div>
+
+      {/* Add task modal */}
+      {showAdd && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowAdd(false)}>
+          <div className="modal">
+            <div className="modal-title">הוספת משימה להיום</div>
+            <div className="fg">
+              <label className="fl">תיאור המשימה</label>
+              <input className="fi" placeholder="למשל: בדוק מלאי לחמניות" value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTask()} autoFocus/>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>setShowAdd(false)}>ביטול</button>
+              <button className="btn btn-primary" onClick={addTask} disabled={saving||!newTask.trim()}>{saving?<span className="spin"/>:"הוסף"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage recurring modal */}
+      {showManage && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowManage(false)}>
+          <div className="modal">
+            <div className="modal-title">ניהול משימות קבועות</div>
+            <div style={{marginBottom:16}}>
+              {recurring.map(r=>(
+                <div key={r.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid var(--br)"}}>
+                  <div style={{fontSize:14,color:"var(--ts)"}}>{r.text}</div>
+                  <button className="btn btn-danger btn-sm" onClick={()=>removeRecurring(r.id)}>הסר</button>
+                </div>
+              ))}
+              {recurring.length===0 && <div style={{fontSize:13,color:"var(--tm)",textAlign:"center",padding:16}}>אין משימות קבועות</div>}
+            </div>
+            <div className="fg">
+              <label className="fl">הוסף משימה קבועה חדשה</label>
+              <input className="fi" placeholder="תיאור המשימה..." value={newRecurring} onChange={e=>setNewRecurring(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addRecurring()}/>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>setShowManage(false)}>סגור</button>
+              <button className="btn btn-primary" onClick={addRecurring} disabled={saving||!newRecurring.trim()}>{saving?<span className="spin"/>:"הוסף"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Progress */}
+      <div className="g2">
+        <div className="card">
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div className="card-title" style={{margin:0}}>התקדמות</div>
+            <span className="badge badge-info">{done}/{tasks.length}</span>
+          </div>
+          <div className="prog-track"><div className="prog-fill" style={{width:`${pct}%`,background:pct===100?"var(--success)":"var(--accent)"}}/></div>
+          <div style={{fontSize:13,color:"var(--tm)",marginTop:4}}>{pct}% הושלם</div>
+        </div>
+        <div className="card">
+          <div className="card-title">סיכום</div>
+          <div style={{display:"flex",gap:20}}>
+            <div><div style={{fontSize:11,color:"var(--ts)",marginBottom:4}}>מלאי לבדיקה</div><div style={{fontSize:24,fontWeight:800,color:"var(--warn)"}}>{stockTasks.length}</div></div>
+            <div><div style={{fontSize:11,color:"var(--ts)",marginBottom:4}}>שגרה</div><div style={{fontSize:24,fontWeight:800,color:"var(--accent)"}}>{routineTasks.length}</div></div>
+            <div><div style={{fontSize:11,color:"var(--ts)",marginBottom:4}}>בוצע</div><div style={{fontSize:24,fontWeight:800,color:"var(--success)"}}>{done}</div></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stock tasks */}
+      {stockTasks.length>0 && (
+        <div className="card">
+          <div className="card-title" style={{color:"var(--warn)"}}>בדיקות מלאי — מאתמול</div>
+          {stockTasks.map(t=>(
+            <div key={t.id} className={`task-item ${t.is_done?"done":""}`} onClick={()=>toggle(t)}>
+              <div className="task-cb">{t.is_done?"✓":""}</div>
+              <div className="task-text">{t.text}</div>
+              <span className="badge badge-warn">מלאי</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Routine tasks */}
+      {routineTasks.length>0 && (
+        <div className="card">
+          <div className="card-title">משימות שגרה</div>
+          {routineTasks.map(t=>(
+            <div key={t.id} className={`task-item ${t.is_done?"done":""}`} onClick={()=>toggle(t)}>
+              <div className="task-cb">{t.is_done?"✓":""}</div>
+              <div className="task-text">{t.text}</div>
+              <span className="badge badge-neu">שגרה</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tasks.length===0 && (
+        <div className="card">
+          <div className="empty">
+            <div style={{fontSize:20,marginBottom:8}}>—</div>
+            אין משימות להיום עדיין
+            <div style={{fontSize:12,marginTop:8,color:"var(--tm)"}}>המשימות נוצרות אוטומטית בפתיחת היום</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ── MENU MANAGER ──
+function MenuManager({ menuItems, setMenuItems, session, profile }) {
+  const [showF, setShowF] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(null);
+  const [f, setF] = useState({name:"",category:""});
+  const canEdit = ["manager","kitchen_manager"].includes(profile?.role);
+
+  const addItem = async () => {
+    if (!f.name||!f.category) return;
+    setSaving(true);
+    const res = await sb.insert("menu_items",{restaurant_id:RESTAURANT_ID,name:f.name,category:f.category,is_active:true},session.access_token);
+    if (res?.[0]) setMenuItems(p=>[...p,res[0]]);
+    setF({name:"",category:""}); setShowF(false); setSaving(false);
+  };
+
+  const toggleActive = async (item) => {
+    const res = await sb.update("menu_items",item.id,{is_active:!item.is_active},session.access_token);
+    if (res?.[0]) setMenuItems(p=>p.map(m=>m.id===item.id?res[0]:m));
+  };
+
+  const deleteItem = async (id) => {
+    setDeleting(id);
+    await sb.delete("menu_items",id,session.access_token);
+    setMenuItems(p=>p.filter(m=>m.id!==id));
+    setDeleting(null);
+  };
+
+  const grouped = CATEGORIES.reduce((acc,cat)=>{ acc[cat]=menuItems.filter(m=>m.category===cat); return acc; },{});
+
+  return (
+    <div>
+      <div className="page-header">
+        <div><div className="page-title">ניהול תפריט</div><div className="page-sub">הוסף, ערוך והסר מנות</div></div>
+        {canEdit && <button className="btn btn-primary" onClick={()=>setShowF(true)}>+ הוסף מנה</button>}
+      </div>
+      {showF && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowF(false)}>
+          <div className="modal">
+            <div className="modal-title">📋 הוספת מנה חדשה</div>
+            <div className="fg"><label className="fl">שם המנה *</label><input className="fi" placeholder="למשל: טרופל בורגר" value={f.name} onChange={e=>setF(p=>({...p,name:e.target.value}))}/></div>
+            <div className="fg"><label className="fl">קטגוריה *</label><select className="fs" value={f.category} onChange={e=>setF(p=>({...p,category:e.target.value}))}><option value="">בחר קטגוריה...</option>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>setShowF(false)}>ביטול</button>
+              <button className="btn btn-primary" onClick={addItem} disabled={saving||!f.name||!f.category}>{saving?<span className="spin"/>:"הוסף מנה"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {CATEGORIES.map(cat=>{
+        const items=grouped[cat]||[];
+        if (items.length===0) return null;
+        return (
+          <div key={cat} className="card">
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+              <div className="card-title" style={{margin:0}}>{cat}</div>
+              <span className="badge badge-neu">{items.length}</span>
+            </div>
+            {items.map(item=>(
+              <div key={item.id} className="dish-item" style={{borderRight:`3px solid ${item.is_active?"var(--success)":"var(--tm)"}`}}>
+                <div><div className="dish-name" style={{opacity:item.is_active?1:.5}}>{item.name}</div><div className="dish-meta">{item.category}</div></div>
+                {canEdit && (
+                  <div style={{display:"flex",gap:8}}>
+                    <button className={`btn btn-sm ${item.is_active?"btn-ghost":"btn-success"}`} onClick={()=>toggleActive(item)}>{item.is_active?"השבת":"הפעל"}</button>
+                    <button className="btn btn-danger btn-sm" onClick={()=>deleteItem(item.id)} disabled={deleting===item.id}>{deleting===item.id?<span className="spin"/>:"מחק"}</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+      {menuItems.length===0 && <div className="card"><div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין מנות בתפריט עדיין</div></div>}
+    </div>
+  );
+}
+
+
+// ── STAFF MANAGER ──
+function StaffManager({ session, profile }) {
+  const [staff, setStaff] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [showReset, setShowReset] = useState(false);
+  const [showRole, setShowRole] = useState(false);
+  const [newPass, setNewPass] = useState("");
+  const [newRole, setNewRole] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    const data = await sb.query("profiles", { select: "*", order: "created_at.asc" }, session.access_token);
+    if (Array.isArray(data)) setStaff(data);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const resetPassword = async () => {
+    if (!newPass || newPass.length < 6) return;
+    setSaving(true);
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_reset_password`, {
+        method: "POST",
+        headers: { ...sb.h(session.access_token), "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: selected.id, new_password: newPass }),
+      });
+      setShowReset(false);
+      setNewPass("");
+    } finally { setSaving(false); }
+  };
+
+  const toggleActive = async (member) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_toggle_user`, {
+      method: "POST",
+      headers: { ...sb.h(session.access_token), "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: member.id, is_active: !member.is_active }),
+    });
+    setStaff(p => p.map(s => s.id === member.id ? { ...s, is_active: !s.is_active } : s));
+  };
+
+  const changeRole = async () => {
+    if (!newRole) return;
+    setSaving(true);
+    const res = await sb.update("profiles", selected.id, { role: newRole }, session.access_token);
+    if (res?.[0]) setStaff(p => p.map(s => s.id === selected.id ? res[0] : s));
+    setShowRole(false);
+    setNewRole("");
+    setSaving(false);
+  };
+
+  const deleteStaff = async (member) => {
+    if (!window.confirm(`למחוק את ${member.full_name}?`)) return;
+    await sb.delete("profiles", member.id, session.access_token);
+    setStaff(p => p.filter(s => s.id !== member.id));
+  };
+
+  const filtered = staff.filter(s =>
+    s.full_name?.includes(search) || s.id?.includes(search)
+  );
+
+  const roleColors = {
+    manager: "badge-danger",
+    maitre_d: "badge-info",
+    kitchen_manager: "badge-warn",
+    kitchen_staff: "badge-neu",
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">ניהול עובדים</div>
+          <div className="page-sub">{staff.length} עובדים רשומים</div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={load}>רענן</button>
+      </div>
+
+      {/* Search */}
+      <div className="fg">
+        <input className="fi" placeholder="חפש עובד לפי שם..." value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+
+      {/* Reset password modal */}
+      {showReset && selected && (
+        <div className="modal-bg" onClick={e => e.target === e.currentTarget && setShowReset(false)}>
+          <div className="modal">
+            <div className="modal-title">איפוס סיסמה — {selected.full_name}</div>
+            <div className="fg">
+              <label className="fl">סיסמה חדשה (לפחות 6 תווים)</label>
+              <input className="fi" type="password" placeholder="סיסמה חדשה" value={newPass} onChange={e => setNewPass(e.target.value)} />
+            </div>
+            {newPass.length > 0 && newPass.length < 6 && <div className="err">סיסמה חייבת להכיל לפחות 6 תווים</div>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn btn-ghost" onClick={() => { setShowReset(false); setNewPass(""); }}>ביטול</button>
+              <button className="btn btn-primary" onClick={resetPassword} disabled={saving || newPass.length < 6}>{saving ? <span className="spin" /> : "אפס סיסמה"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change role modal */}
+      {showRole && selected && (
+        <div className="modal-bg" onClick={e => e.target === e.currentTarget && setShowRole(false)}>
+          <div className="modal">
+            <div className="modal-title">שינוי תפקיד — {selected.full_name}</div>
+            <div className="fg">
+              <label className="fl">תפקיד נוכחי: {ROLE_LABELS[selected.role]}</label>
+              <select className="fs" value={newRole} onChange={e => setNewRole(e.target.value)}>
+                <option value="">בחר תפקיד חדש...</option>
+                <option value="maitre_d">אחמ"ש</option>
+                <option value="kitchen_manager">מנהל מטבח</option>
+                <option value="kitchen_staff">עובד מטבח</option>
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn btn-ghost" onClick={() => { setShowRole(false); setNewRole(""); }}>ביטול</button>
+              <button className="btn btn-primary" onClick={changeRole} disabled={saving || !newRole}>{saving ? <span className="spin" /> : "שמור"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Staff list */}
+      {loading
+        ? <div className="empty"><div className="spin" style={{ width: 28, height: 28, margin: "0 auto 10px" }} /></div>
+        : filtered.map(member => (
+          <div key={member.id} className="card" style={{ marginBottom: 10, opacity: member.is_active ? 1 : 0.5 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div className="avatar" style={{ width: 38, height: 38, fontSize: 13 }}>
+                  {member.full_name?.split(" ").map(w => w[0]).join("").slice(0, 2)}
+                </div>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "var(--tp)" }}>{member.full_name}</div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
+                    <span className={`badge ${roleColors[member.role] || "badge-neu"}`}>{ROLE_LABELS[member.role]}</span>
+                    {!member.is_active && <span className="badge badge-danger">מושבת</span>}
+                  </div>
+                </div>
+              </div>
+
+              {member.id !== profile.id && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { setSelected(member); setShowRole(true); }}>
+                    שנה תפקיד
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { setSelected(member); setShowReset(true); }}>
+                    איפוס סיסמה
+                  </button>
+                  <button
+                    className={`btn btn-sm ${member.is_active ? "btn-warn" : "btn-success"}`}
+                    onClick={() => toggleActive(member)}
+                  >
+                    {member.is_active ? "השבת" : "הפעל"}
+                  </button>
+                  <button className="btn btn-danger btn-sm" onClick={() => deleteStaff(member)}>
+                    מחק
+                  </button>
+                </div>
+              )}
+
+              {member.id === profile.id && (
+                <span className="badge badge-neu">זה אתה</span>
+              )}
+            </div>
+          </div>
+        ))
+      }
+
+      {!loading && filtered.length === 0 && (
+        <div className="card"><div className="empty">לא נמצאו עובדים</div></div>
+      )}
+    </div>
+  );
+}
+
+// ── STAFF APPROVAL + MANAGER ──
+function StaffHub({ session, profile }) {
+  const [tab, setTab] = useState("staff");
+  const [staff, setStaff] = useState([]);
+  const [pending, setPending] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [showReset, setShowReset] = useState(false);
+  const [showRole, setShowRole] = useState(false);
+  const [newPass, setNewPass] = useState("");
+  const [newRole, setNewRole] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const loadAll = async () => {
+    setLoading(true);
+    const [s, p] = await Promise.all([
+      sb.query("profiles", { select: "*" }, session.access_token),
+      sb.query("pending_staff", { status: "eq.pending", restaurant_id: `eq.${RESTAURANT_ID}`, select: "*" }, session.access_token),
+    ]);
+    if (Array.isArray(s)) setStaff(s);
+    if (Array.isArray(p)) setPending(p);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadAll(); }, []);
+
+  const approve = async (item) => {
+    setActing(item.id);
+    try {
+      await sb.insert("profiles", { id: item.user_id, full_name: item.full_name, role: item.role, is_active: true }, session.access_token);
+      await sb.update("pending_staff", item.id, { status: "approved", reviewed_by: profile.id, reviewed_at: new Date().toISOString() }, session.access_token);
+      setPending(p => p.filter(x => x.id !== item.id));
+      loadAll();
+    } finally { setActing(null); }
+  };
+
+  const reject = async (item) => {
+    setActing(item.id);
+    try {
+      await sb.update("pending_staff", item.id, { status: "rejected", reviewed_by: profile.id, reviewed_at: new Date().toISOString() }, session.access_token);
+      setPending(p => p.filter(x => x.id !== item.id));
+    } finally { setActing(null); }
+  };
+
+  const resetPassword = async () => {
+    if (!newPass || newPass.length < 6) return;
+    setSaving(true);
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_reset_password`, {
+        method: "POST",
+        headers: { ...sb.h(session.access_token), "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: selected.id, new_password: newPass }),
+      });
+      setShowReset(false); setNewPass("");
+    } finally { setSaving(false); }
+  };
+
+  const changeRole = async () => {
+    if (!newRole) return;
+    setSaving(true);
+    const res = await sb.update("profiles", selected.id, { role: newRole }, session.access_token);
+    if (res?.[0]) setStaff(p => p.map(s => s.id === selected.id ? res[0] : s));
+    setShowRole(false); setNewRole(""); setSaving(false);
+  };
+
+  const toggleActive = async (member) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_toggle_user`, {
+      method: "POST",
+      headers: { ...sb.h(session.access_token), "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: member.id, is_active: !member.is_active }),
+    });
+    setStaff(p => p.map(s => s.id === member.id ? { ...s, is_active: !s.is_active } : s));
+  };
+
+  const deleteStaff = async (member) => {
+    if (!window.confirm(`למחוק את ${member.full_name}?`)) return;
+    await sb.delete("profiles", member.id, session.access_token);
+    setStaff(p => p.filter(s => s.id !== member.id));
+  };
+
+  const roleColors = { manager: "badge-danger", maitre_d: "badge-info", kitchen_manager: "badge-warn", kitchen_staff: "badge-neu" };
+  const filtered = staff.filter(s => s.full_name?.includes(search));
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">ניהול עובדים</div>
+          <div className="page-sub">{staff.length} עובדים · {pending.length} ממתינים לאישור</div>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={loadAll}>רענן</button>
+      </div>
+
+      <div className="tabs">
+        <div className={`tab ${tab==="staff"?"active":""}`} onClick={()=>setTab("staff")}>
+          עובדים פעילים ({staff.length})
+        </div>
+        <div className={`tab ${tab==="pending"?"active":""}`} onClick={()=>setTab("pending")}>
+          ממתינים לאישור {pending.length>0&&<span className="nav-badge" style={{marginRight:6}}>{pending.length}</span>}
+        </div>
+      </div>
+
+      {/* Modals */}
+      {showReset && selected && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowReset(false)}>
+          <div className="modal">
+            <div className="modal-title">איפוס סיסמה — {selected.full_name}</div>
+            <div className="fg">
+              <label className="fl">סיסמה חדשה (לפחות 6 תווים)</label>
+              <input className="fi" type="password" placeholder="סיסמה חדשה" value={newPass} onChange={e=>setNewPass(e.target.value)}/>
+            </div>
+            {newPass.length>0&&newPass.length<6&&<div className="err">סיסמה חייבת להכיל לפחות 6 תווים</div>}
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>{setShowReset(false);setNewPass("");}}>ביטול</button>
+              <button className="btn btn-primary" onClick={resetPassword} disabled={saving||newPass.length<6}>{saving?<span className="spin"/>:"אפס סיסמה"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRole && selected && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setShowRole(false)}>
+          <div className="modal">
+            <div className="modal-title">שינוי תפקיד — {selected.full_name}</div>
+            <div className="fg">
+              <label className="fl">תפקיד נוכחי: {ROLE_LABELS[selected.role]}</label>
+              <select className="fs" value={newRole} onChange={e=>setNewRole(e.target.value)}>
+                <option value="">בחר תפקיד חדש...</option>
+                <option value="maitre_d">אחמ"ש</option>
+                <option value="kitchen_manager">מנהל מטבח</option>
+                <option value="kitchen_staff">עובד מטבח</option>
+              </select>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={()=>{setShowRole(false);setNewRole("");}}>ביטול</button>
+              <button className="btn btn-primary" onClick={changeRole} disabled={saving||!newRole}>{saving?<span className="spin"/>:"שמור"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active staff */}
+      {tab==="staff" && (
+        <div>
+          <div className="fg">
+            <input className="fi" placeholder="חפש עובד..." value={search} onChange={e=>setSearch(e.target.value)}/>
+          </div>
+          {loading
+            ? <div className="empty"><div className="spin" style={{width:28,height:28,margin:"0 auto"}}/></div>
+            : filtered.map(member=>(
+              <div key={member.id} className="card" style={{marginBottom:10,opacity:member.is_active?1:.5}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div className="avatar" style={{width:38,height:38,fontSize:13}}>
+                      {member.full_name?.split(" ").map(w=>w[0]).join("").slice(0,2)}
+                    </div>
+                    <div>
+                      <div style={{fontSize:15,fontWeight:700,color:"var(--tp)"}}>{member.full_name}</div>
+                      <div style={{display:"flex",gap:6,marginTop:4,alignItems:"center"}}>
+                        <span className={`badge ${roleColors[member.role]||"badge-neu"}`}>{ROLE_LABELS[member.role]}</span>
+                        {!member.is_active&&<span className="badge badge-danger">מושבת</span>}
+                      </div>
+                    </div>
+                  </div>
+                  {member.id!==profile.id
+                    ? <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>{setSelected(member);setShowRole(true);}}>שנה תפקיד</button>
+                        <button className="btn btn-ghost btn-sm" onClick={()=>{setSelected(member);setShowReset(true);}}>איפוס סיסמה</button>
+                        <button className={`btn btn-sm ${member.is_active?"btn-warn":"btn-success"}`} onClick={()=>toggleActive(member)}>{member.is_active?"השבת":"הפעל"}</button>
+                        <button className="btn btn-danger btn-sm" onClick={()=>deleteStaff(member)}>מחק</button>
+                      </div>
+                    : <span className="badge badge-neu">זה אתה</span>
+                  }
+                </div>
+              </div>
+            ))
+          }
+        </div>
+      )}
+
+      {/* Pending approvals */}
+      {tab==="pending" && (
+        <div>
+          {pending.length===0
+            ? <div className="card"><div className="empty"><div style={{fontSize:20,marginBottom:8}}>—</div>אין בקשות ממתינות</div></div>
+            : pending.map(item=>(
+              <div key={item.id} className="card" style={{marginBottom:10}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+                  <div>
+                    <div style={{fontSize:16,fontWeight:700,color:"var(--tp)",marginBottom:4}}>{item.full_name}</div>
+                    <div style={{fontSize:13,color:"var(--ts)",marginBottom:4}}>{item.email}</div>
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <span className={`badge ${roleColors[item.role]||"badge-neu"}`}>{ROLE_LABELS[item.role]}</span>
+                      <span style={{fontSize:12,color:"var(--tm)"}}>{new Date(item.created_at).toLocaleDateString("he-IL")}</span>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button className="btn btn-danger btn-sm" onClick={()=>reject(item)} disabled={acting===item.id}>{acting===item.id?<span className="spin"/>:"דחה"}</button>
+                    <button className="btn btn-success" onClick={()=>approve(item)} disabled={acting===item.id}>{acting===item.id?<span className="spin"/>:"אשר גישה"}</button>
+                  </div>
+                </div>
+              </div>
+            ))
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+
+// ── REPORT CARD ──
+function ReportCard({ report: r }) {
+  const [expanded, setExpanded] = useState(false);
+  const [selectedReturn, setSelectedReturn] = useState(null);
+  const toggle = (e) => { e.stopPropagation(); setExpanded(p => !p); };
+
+  return (
+    <div className="card" style={{marginBottom:12}}>
+      {selectedReturn && (
+        <div className="modal-bg" onClick={e=>e.target===e.currentTarget&&setSelectedReturn(null)}>
+          <div className="modal">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div className="modal-title" style={{margin:0}}>{selectedReturn.dish_name}</div>
+              <button onClick={()=>setSelectedReturn(null)} style={{background:"none",border:"none",color:"var(--ts)",fontSize:22,cursor:"pointer"}}>×</button>
+            </div>
+            {selectedReturn.image_url && (
+              <img src={selectedReturn.image_url} style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:"var(--r)",marginBottom:14,border:"1px solid var(--br)"}}/>
+            )}
+            <div style={{background:"var(--bg)",borderRadius:"var(--r)",padding:14,marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>שולחן</span>
+                <span style={{color:"var(--tp)",fontWeight:600}}>שולחן {selectedReturn.table_number}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>סיבה</span>
+                <span className="badge badge-warn">{selectedReturn.reason}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"7px 0"}}>
+                <span style={{color:"var(--ts)",fontSize:13}}>שעה</span>
+                <span style={{color:"var(--tp)",fontSize:13}}>{selectedReturn.created_at?new Date(selectedReturn.created_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""}</span>
+              </div>
+            </div>
+            {selectedReturn.notes && (
+              <div style={{background:"var(--bg)",borderRadius:"var(--r)",padding:14}}>
+                <div style={{fontSize:12,color:"var(--ts)",marginBottom:6}}>הערות</div>
+                <div style={{fontSize:14,color:"var(--tp)"}}>{selectedReturn.notes}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}} onClick={toggle}>
+        <div>
+          <div style={{fontSize:15,fontWeight:700,color:"var(--tp)"}}>{new Date(r.report_date).toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}</div>
+          <div style={{fontSize:12,color:"var(--tm)",marginTop:2}}>{new Date(r.created_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"})}</div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <span className="badge badge-danger">סגירות: {r.closed_count}</span>
+          <span className="badge badge-warn">החזרות: {r.returns_count}</span>
+          <span className="badge badge-success">{r.tasks_done}/{r.tasks_total}</span>
+          <span style={{color:"var(--ts)",fontSize:18,marginRight:4}}>{expanded?"▲":"▼"}</span>
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={{marginTop:14,borderTop:"1px solid var(--br)",paddingTop:14}}>
+          {r.closed_data?.length>0 && (
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:12,color:"var(--ts)",fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>מנות שנסגרו</div>
+              {r.closed_data.map((d,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--br)"}}>
+                  <span style={{fontSize:13,color:"var(--tp)"}}>{d.dish_name}</span>
+                  <span className="badge badge-neu" style={{fontSize:11}}>{d.reason}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {r.returns_data?.length>0 && (
+            <div>
+              <div style={{fontSize:12,color:"var(--ts)",fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>מנות שחזרו</div>
+              {r.returns_data.map((d,i)=>(
+                <div key={i} onClick={()=>setSelectedReturn(d)}
+                  style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--br)",cursor:"pointer",transition:"background .2s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="var(--hover)"}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div>
+                    <span style={{fontSize:13,color:"var(--tp)",fontWeight:600}}>{d.dish_name}</span>
+                    <span style={{fontSize:11,color:"var(--tm)",marginRight:8}}> · שולחן {d.table_number}</span>
+                    {d.notes && <div style={{fontSize:11,color:"var(--tm)",marginTop:2}}>{d.notes}</div>}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span className="badge badge-warn" style={{fontSize:11}}>{d.reason}</span>
+                    <span style={{color:"var(--ts)",fontSize:12}}>›</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!r.closed_data?.length && !r.returns_data?.length && (
+            <div style={{fontSize:13,color:"var(--tm)",textAlign:"center",padding:8}}>יום ללא אירועים</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CLOSE DAY BUTTON ──
+function CloseDayButton({ closing, closedToday, returnsToday, tasksDone, tasksTotal, onConfirm }) {
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const openCount = closedToday.filter(d => d.status === "closed").length;
+  const unfinished = tasksTotal - tasksDone;
+
+  return (
+    <>
+      <button className="btn btn-danger" onClick={() => setShowConfirm(true)} disabled={closing}>
+        {closing ? <span className="spin"/> : "סגור יום"}
+      </button>
+
+      {showConfirm && (
+        <div className="modal-bg" onClick={e => e.target === e.currentTarget && setShowConfirm(false)}>
+          <div className="modal">
+            <div className="modal-title" style={{marginBottom:8}}>סגירת יום — אישור</div>
+            <div style={{fontSize:13,color:"var(--ts)",marginBottom:20}}>לפני הסגירה, בדוק את הסיכום:</div>
+
+            <div style={{background:"var(--bg)",borderRadius:"var(--r)",padding:16,marginBottom:20}}>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)"}}>מנות שחזרו היום</span>
+                <span style={{fontWeight:700,color:returnsToday.length>0?"var(--warn)":"var(--success)"}}>{returnsToday.length}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)"}}>מנות סגורות כרגע</span>
+                <span style={{fontWeight:700,color:openCount>0?"var(--danger)":"var(--success)"}}>{openCount}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--br)"}}>
+                <span style={{color:"var(--ts)"}}>משימות שלא בוצעו</span>
+                <span style={{fontWeight:700,color:unfinished>0?"var(--warn)":"var(--success)"}}>{unfinished}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}>
+                <span style={{color:"var(--ts)"}}>אחוז ביצוע משימות</span>
+                <span style={{fontWeight:700,color:"var(--accent)"}}>{tasksTotal>0?Math.round((tasksDone/tasksTotal)*100):0}%</span>
+              </div>
+            </div>
+
+            {openCount > 0 && (
+              <div className="alert warn" style={{marginBottom:16}}>
+                <div style={{fontSize:13,fontWeight:600,color:"var(--warn)"}}>שים לב!</div>
+                <div style={{fontSize:12,color:"var(--ts)",marginTop:2}}>יש {openCount} מנות סגורות — הן יישארו סגורות גם מחר.</div>
+              </div>
+            )}
+
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button className="btn btn-ghost" onClick={() => setShowConfirm(false)}>ביטול</button>
+              <button className="btn btn-danger" onClick={() => { setShowConfirm(false); onConfirm(); }}>
+                אישור — סגור יום
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── DAILY SUMMARY ──
+function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, profile, onDayClose }) {
+  const [closedDay, setClosedDay] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [tab, setTab] = useState("today");
+  const [reports, setReports] = useState([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+
+  const todayStr = new Date().toISOString().slice(0,10);
+  const closedToday = closed.filter(d => d.closed_at?.startsWith(todayStr));
+  const returnsToday = returns.filter(r => r.created_at?.startsWith(todayStr));
+  const tasksDone = tasks.filter(t => t.is_done).length;
+  const tasksTotal = tasks.length;
+
+  const dishC = {};
+  returnsToday.forEach(r => { dishC[r.dish_name] = (dishC[r.dish_name]||0)+1; });
+  const topReturns = Object.entries(dishC).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const reaC = {};
+  returnsToday.forEach(r => { reaC[r.reason] = (reaC[r.reason]||0)+1; });
+  const topReasons = Object.entries(reaC).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+  const loadReports = async () => {
+    setLoadingReports(true);
+    const data = await sb.query("daily_reports", {
+      restaurant_id: `eq.${RESTAURANT_ID}`,
+      select: "*",
+      order: "report_date.desc",
+    }, session.access_token);
+    if (Array.isArray(data)) setReports(data);
+    setLoadingReports(false);
+  };
+
+  useEffect(() => { if (tab === "history") loadReports(); }, [tab]);
+
+  const closeDay = async () => {
+    setClosing(true);
+    try {
+      // שמור דוח יומי
+      await sb.insert("daily_reports", {
+        restaurant_id: RESTAURANT_ID,
+        report_date: todayStr,
+        closed_count: closedToday.length,
+        returns_count: returnsToday.length,
+        tasks_done: tasksDone,
+        tasks_total: tasksTotal,
+        closed_data: closedToday,
+        returns_data: returnsToday,
+        created_by: profile.id,
+      }, session.access_token);
+
+      // סמן את ההחזרות כ-archived בבסיס הנתונים
+      const todayReturns = returns.filter(r => r.created_at?.startsWith(todayStr));
+      await Promise.all(todayReturns.map(r =>
+        sb.update("dish_returns", r.id, { archived: true }, session.access_token)
+      ));
+      setReturns([]);
+
+      // אפס משימות בוקר
+      setTasks([]);
+
+      if (onDayClose) onDayClose(true);
+      setClosedDay(true);
+    } finally { setClosing(false); }
+  };
+
+  if (closedDay) return (
+    <div style={{textAlign:"center",padding:"60px 20px"}}>
+      <div style={{fontSize:40,marginBottom:16,color:"var(--accent)"}}>✓</div>
+      <div style={{fontSize:24,fontWeight:800,color:"var(--tp)",marginBottom:8}}>היום נסגר בהצלחה!</div>
+      <div style={{fontSize:14,color:"var(--ts)",marginBottom:24}}>לילה טוב לכולם · {new Date().toLocaleDateString("he-IL")}</div>
+      <div style={{background:"var(--card)",border:"1px solid var(--br)",borderRadius:"var(--rl)",padding:20,maxWidth:400,margin:"0 auto",textAlign:"right"}}>
+        <div style={{fontSize:13,color:"var(--ts)",marginBottom:12,fontWeight:600}}>סיכום המשמרת</div>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{color:"var(--ts)"}}>מנות שנסגרו</span><span style={{fontWeight:700,color:"var(--danger)"}}>{closedToday.length}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{color:"var(--ts)"}}>מנות שחזרו</span><span style={{fontWeight:700,color:"var(--warn)"}}>{returnsToday.length}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"var(--ts)"}}>משימות שבוצעו</span><span style={{fontWeight:700,color:"var(--success)"}}>{tasksDone}/{tasksTotal}</span></div>
+      </div>
+      <button className="btn btn-ghost" style={{marginTop:20}} onClick={()=>{setClosedDay(false);setTab("history");}}>📋 צפה בהיסטוריה</button>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <div className="page-title">סיכום יומי</div>
+          <div className="page-sub">{new Date().toLocaleDateString("he-IL",{weekday:"long",day:"numeric",month:"long"})}</div>
+        </div>
+        <CloseDayButton
+          closing={closing}
+          closedToday={closedToday}
+          returnsToday={returnsToday}
+          tasksDone={tasksDone}
+          tasksTotal={tasksTotal}
+          onConfirm={closeDay}
+        />
+      </div>
+
+      <div className="tabs">
+        <div className={`tab ${tab==="today"?"active":""}`} onClick={()=>setTab("today")}>היום</div>
+        <div className={`tab ${tab==="history"?"active":""}`} onClick={()=>setTab("history")}>היסטוריה</div>
+      </div>
+
+      {tab==="today" && (
+        <div>
+          <div className="g4">
+            {[
+              {label:"מנות שנסגרו",val:closedToday.length,sub:"במהלך היום",icon:"⊘",cls:"danger"},
+              {label:"מנות שחזרו",val:returnsToday.length,sub:"מלקוחות",icon:"↩",cls:"warn"},
+              {label:"משימות בוצעו",val:`${tasksDone}/${tasksTotal}`,sub:"מרשימת הבוקר",icon:"✅",cls:"success"},
+              {label:"אחוז ביצוע",val:`${tasksTotal>0?Math.round((tasksDone/tasksTotal)*100):0}%`,sub:"יעילות משמרת",icon:"◈",cls:"info"},
+            ].map(m=>(
+              <div key={m.label} className={`mcard ${m.cls}`}>
+                <div className="mlabel">{m.label}</div>
+                <div className="mval">{m.val}</div>
+                <div className="msub">{m.sub}</div>
+                <div className="micon">{m.icon}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="g2">
+            <div className="card">
+              <div className="card-title">מנות שנסגרו היום</div>
+              {closedToday.length===0
+                ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>לא נסגרו מנות היום</div>
+                : closedToday.map(d=>(
+                  <div key={d.id} className="dish-item closed">
+                    <div>
+                      <div className="dish-name">{d.dish_name}</div>
+                      <div className="dish-meta">{d.reason} · {d.closed_at?new Date(d.closed_at).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}):""}</div>
+                    </div>
+                    <span className={`badge ${d.status==="closed"?"badge-danger":"badge-success"}`}>{d.status==="closed"?"סגור":"נפתח"}</span>
+                  </div>
+                ))
+              }
+            </div>
+            <div className="card">
+              <div className="card-title">מנות שחזרו היום</div>
+              {returnsToday.length===0
+                ? <div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין החזרות היום!</div>
+                : returnsToday.map(r=>(
+                  <div key={r.id} className="dish-item">
+                    <div>
+                      <div className="dish-name">{r.dish_name}</div>
+                      <div className="dish-meta">שולחן {r.table_number} · {r.reason}</div>
+                    </div>
+                    <span className="badge badge-warn">{r.reason}</span>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+
+          {returnsToday.length>0 && (
+            <div className="g2">
+              <div className="card">
+                <div className="card-title">Top מנות שחזרו</div>
+                {topReturns.map(([dish,cnt],i)=>(
+                  <div key={dish} className="bar-row">
+                    <div className="bar-label">{dish}</div>
+                    <div className="bar-track"><div className="bar-fill" style={{width:`${(cnt/topReturns[0][1])*100}%`,background:COLORS[i]}}/></div>
+                    <div className="bar-count">{cnt}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="card">
+                <div className="card-title">סיבות עיקריות</div>
+                {topReasons.map(([reason,cnt],i)=>(
+                  <div key={reason} className="bar-row">
+                    <div className="bar-label">{reason}</div>
+                    <div className="bar-track"><div className="bar-fill" style={{width:`${(cnt/topReasons[0][1])*100}%`,background:COLORS[i]}}/></div>
+                    <div className="bar-count">{cnt}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <div className="card-title">משימות בוקר</div>
+            {tasks.length===0
+              ? <div className="empty">אין משימות</div>
+              : tasks.map(t=>(
+                <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid var(--br)"}}>
+                  <div style={{width:20,height:20,borderRadius:6,background:t.is_done?"var(--success)":"transparent",border:`2px solid ${t.is_done?"var(--success)":"var(--brs)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"white",flexShrink:0}}>{t.is_done?"✓":""}</div>
+                  <div style={{fontSize:14,color:t.is_done?"var(--tm)":"var(--ts)",textDecoration:t.is_done?"line-through":"none",flex:1}}>{t.text}</div>
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      )}
+
+      {tab==="history" && (
+        <div>
+          {loadingReports
+            ? <div className="empty"><div className="spin" style={{width:28,height:28,margin:"0 auto 10px"}}/></div>
+            : reports.length===0
+              ? <div className="card"><div className="empty"><div className="empty-icon" style={{fontSize:20}}>—</div>אין דוחות עדיין<div style={{fontSize:12,marginTop:8,color:"var(--tm)"}}>לחץ "סגור יום" כדי לשמור את הדוח הראשון</div></div></div>
+              : reports.map(r=>(
+                <ReportCard key={r.id} report={r}/>
+              ))
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ── MAIN APP ──
+export default function App() {
+  const { session, profile, loading, signIn, signOut } = useAuth();
+  const [nav, setNav] = useState("dash");
+  const [showRegister, setShowRegister] = useState(false);
+  const [closed, setClosed] = useState([]);
+  const [returns, setReturns] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [dayClosed, setDayClosed] = useState(false);
+
+  const loadData = useCallback(async () => {
+    if (!session?.access_token) return;
+    if (dayClosed) return;
+    try {
+      const [c,r,m,t] = await Promise.all([
+        sb.query("closed_dishes",{restaurant_id:`eq.${RESTAURANT_ID}`,select:"*"},session.access_token),
+        sb.query("dish_returns",{restaurant_id:`eq.${RESTAURANT_ID}`,archived:"eq.false",select:"*"},session.access_token),
+        sb.query("menu_items",{restaurant_id:`eq.${RESTAURANT_ID}`,select:"*"},session.access_token),
+        sb.query("morning_tasks",{restaurant_id:`eq.${RESTAURANT_ID}`,task_date:`eq.${new Date().toISOString().slice(0,10)}`,select:"*"},session.access_token),
+      ]);
+      if (Array.isArray(c)) setClosed(c);
+      if (Array.isArray(r)) setReturns(r);
+      if (Array.isArray(m)) setMenuItems(m);
+      if (Array.isArray(t)) setTasks(t);
+    } catch(e) { console.error(e); }
+  }, [session]);
+
+  useEffect(()=>{ loadData(); },[loadData]);
+
+  // Real-time: reload data on any change
+  useEffect(()=>{
+    if (!session?.access_token) return;
+
+    const wsUrl = SUPABASE_URL.replace("https://","wss://") + "/realtime/v1/websocket?apikey=" + SUPABASE_ANON_KEY + "&vsn=1.0.0";
+    let ws;
+    let heartbeat;
+
+    try {
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({topic:"realtime:public:closed_dishes",event:"phx_join",payload:{},ref:"1"}));
+        ws.send(JSON.stringify({topic:"realtime:public:dish_returns",event:"phx_join",payload:{},ref:"2"}));
+        ws.send(JSON.stringify({topic:"realtime:public:pending_staff",event:"phx_join",payload:{},ref:"3"}));
+        heartbeat = setInterval(()=>{ ws.send(JSON.stringify({topic:"phoenix",event:"heartbeat",payload:{},ref:"hb"})); },30000);
+      };
+
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.event === "INSERT" || msg.event === "UPDATE" || msg.event === "DELETE") {
+          loadData();
+        }
+      };
+
+      ws.onerror = () => {};
+    } catch(e) {}
+
+    // Fallback poll every 30 seconds
+    const interval = setInterval(()=>{ loadData(); }, 30000);
+
+    return ()=>{
+      clearInterval(interval);
+      clearInterval(heartbeat);
+      if (ws) ws.close();
+    };
+  },[session, loadData]);
+
+  if (loading) return (<><style>{css}</style><div className="loading-screen"><div className="spin" style={{width:36,height:36,borderWidth:3}}/><div>טוען...</div></div></>);
+
+  if (!session||!profile) return (
+    <>
+      <style>{css}</style>
+      {showRegister
+        ? <RegisterScreen onBack={()=>setShowRegister(false)}/>
+        : <LoginScreen onLogin={signIn} onRegister={()=>setShowRegister(true)}/>
+      }
+    </>
+  );
+
+  const closedCount = closed.filter(d=>d.status==="closed").length;
+  const initials = profile.full_name?.split(" ").map(w=>w[0]).join("").slice(0,2)||"?";
+
+  const navItems = [
+    {id:"dash",   label:"Dashboard",    icon:"◈"},
+    {id:"closed", label:"סגירת מנות",   icon:"⊘",badge:closedCount||null},
+    {id:"returns",label:"מנות שחזרו",   icon:"↩",badge:returns.length||null},
+    {id:"morning",label:"משימות בוקר",  icon:"◎"},
+    {id:"menu",   label:"ניהול תפריט",  icon:"≡"},
+    {id:"staff",  label:"אישור עובדים", icon:"⊕",managerOnly:true},
+    {id:"summary", label:"סיכום יומי",   icon:"◐",managerOnly:true},
+  ];
+
+  return (
+    <>
+      <style>{css}</style>
+      <div className="app">
+        <div className="topbar">
+          <div style={{display:"flex",alignItems:"center",gap:16}}>
+            <div className="logo">Flow<span>OS</span><span className="branch">| סניף {BRANCH_NAME}</span></div>
+            <div className="nav-tabs">
+              {navItems.filter(item=>!item.managerOnly||profile.role==="manager").map(item=>(
+                <div key={item.id} className={`nav-tab ${nav===item.id?"active":""}`} onClick={()=>setNav(item.id)}>
+                  <span>{item.icon}</span>
+                  <span>{item.label}</span>
+                  {item.badge && <span className="nav-badge">{item.badge}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="user-chip">
+            <div className="avatar">{initials}</div>
+            <div className="user-name-text" style={{fontSize:13,color:"var(--tp)",fontWeight:500}}>{profile.full_name}</div>
+            <span className="badge badge-info" style={{fontSize:11,padding:"2px 8px"}}>{ROLE_LABELS[profile.role]}</span>
+            <button className="btn btn-ghost btn-sm" onClick={signOut} style={{padding:"3px 10px"}}>יציאה</button>
+          </div>
+        </div>
+        <div className="page">
+          {nav==="dash"    && <Dashboard closed={closed} returns={returns}/>}
+          {nav==="closed"  && <ClosedDishes closed={closed} setClosed={setClosed} menuItems={menuItems} session={session} profile={profile}/>}
+          {nav==="returns" && <Returns returns={returns} setReturns={setReturns} menuItems={menuItems} session={session} profile={profile}/>}
+          {nav==="morning" && <MorningTasks closed={closed} returns={returns} tasks={tasks} setTasks={setTasks} session={session} profile={profile}/>}
+          {nav==="menu"    && <MenuManager menuItems={menuItems} setMenuItems={setMenuItems} session={session} profile={profile}/>}
+          {nav==="staff" && <StaffHub session={session} profile={profile}/>}
+          {nav==="summary" && <DailySummary closed={closed} returns={returns} setReturns={setReturns} tasks={tasks} setTasks={setTasks} session={session} profile={profile} onDayClose={(closed)=>setDayClosed(closed)}/>}
+        </div>
+
+        <div className="bottom-nav">
+          {navItems.filter(item=>!item.managerOnly||profile.role==="manager").map(item=>(
+            <div key={item.id} className={`bottom-nav-item ${nav===item.id?"active":""}`} onClick={()=>setNav(item.id)}>
+              {item.badge && <span className="bottom-nav-badge">{item.badge}</span>}
+              <span className="bottom-nav-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
