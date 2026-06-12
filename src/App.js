@@ -465,7 +465,9 @@ function ClosedDishes({ closed, setClosed, menuItems, session, profile }) {
   const [showF, setShowF] = useState(false);
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState({dish_name:"",category:"",reason:"",notes:""});
-  const dishOptions = menuItems.length>0 ? menuItems.map(m=>m.name) : ["אסאדו בורגר","אמריקן דרים","דיוטי קומבו","קיסר סלד","ריבס"];
+  const dishOptions = menuItems.length>0
+    ? (f.category ? menuItems.filter(m=>m.category===f.category).map(m=>m.name) : [])
+    : ["אסאדו בורגר","אמריקן דרים","דיוטי קומבו","קיסר סלד","ריבס"];
 
   const doClose = async () => {
     if (!f.dish_name||!f.category||!f.reason) return;
@@ -1588,10 +1590,14 @@ function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, p
         created_by: profile.id,
       }, session.access_token);
 
-      // אפס מנות שחזרו — מחק את כולן מהתצוגה
+      // סמן את ההחזרות כ-archived בבסיס הנתונים
+      const todayReturns = returns.filter(r => r.created_at?.startsWith(todayStr));
+      await Promise.all(todayReturns.map(r =>
+        sb.update("dish_returns", r.id, { archived: true }, session.access_token)
+      ));
       setReturns([]);
 
-      // אפס משימות בוקר — מחק את כולן מהתצוגה
+      // אפס משימות בוקר
       setTasks([]);
 
       setClosedDay(true);
@@ -1758,7 +1764,7 @@ export default function App() {
     try {
       const [c,r,m,t] = await Promise.all([
         sb.query("closed_dishes",{restaurant_id:`eq.${RESTAURANT_ID}`,select:"*"},session.access_token),
-        sb.query("dish_returns",{restaurant_id:`eq.${RESTAURANT_ID}`,select:"*"},session.access_token),
+        sb.query("dish_returns",{restaurant_id:`eq.${RESTAURANT_ID}`,archived:"eq.false",select:"*"},session.access_token),
         sb.query("menu_items",{restaurant_id:`eq.${RESTAURANT_ID}`,select:"*"},session.access_token),
         sb.query("morning_tasks",{restaurant_id:`eq.${RESTAURANT_ID}`,task_date:`eq.${new Date().toISOString().slice(0,10)}`,select:"*"},session.access_token),
       ]);
