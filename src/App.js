@@ -387,7 +387,7 @@ function LoginScreen({ onLogin, onRegister }) {
 }
 
 // ── DASHBOARD ──
-function Dashboard({ closed, returns }) {
+function Dashboard({ closed, returns, dayClosed, onOpenDay }) {
   const closedNow = closed.filter(d=>d.status==="closed").length;
   const todayStr = new Date().toISOString().slice(0,10);
   const rToday = returns.filter(r=>r.created_at?.startsWith(todayStr)).length;
@@ -401,9 +401,16 @@ function Dashboard({ closed, returns }) {
 
   return (
     <div>
-      <div style={{marginBottom:20}}>
-        <div className="page-title">Dashboard</div>
-        <div className="page-sub">סקירה כללית · סניף {BRANCH_NAME} · {TODAY()}</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,flexWrap:"wrap",gap:10}}>
+        <div>
+          <div className="page-title">Dashboard</div>
+          <div className="page-sub">סקירה כללית · סניף {BRANCH_NAME} · {TODAY()}</div>
+        </div>
+        {dayClosed && (
+          <button className="btn btn-success" onClick={onOpenDay} style={{fontSize:15,padding:"10px 24px"}}>
+            פתח יום חדש
+          </button>
+        )}
       </div>
       {diotyCnt>=3 && <div className="alert"><div style={{fontSize:14,fontWeight:700,color:"var(--danger)"}}>!</div><div><div className="alert-title">דיוטי קומבו חזרה {diotyCnt} פעמים היום!</div><div className="alert-sub">נדרש טיפול מיידי</div></div></div>}
       {closedNow>=2 && <div className="alert warn"><div style={{fontSize:14,fontWeight:700,color:"var(--warn)"}}>!</div><div><div className="alert-title">{closedNow} מנות סגורות כרגע</div><div className="alert-sub">עדכן את הצוות</div></div></div>}
@@ -1868,7 +1875,7 @@ export default function App() {
           </div>
         </div>
         <div className="page">
-          {nav==="dash"    && <Dashboard closed={closed} returns={returns}/>}
+          {nav==="dash"    && <Dashboard closed={closed} returns={returns} dayClosed={dayClosed} onOpenDay={()=>setDayClosed(false)}/>}
           {nav==="closed"  && <ClosedDishes closed={closed} setClosed={setClosed} menuItems={menuItems} session={session} profile={profile}/>}
           {nav==="returns" && <Returns returns={returns} setReturns={setReturns} menuItems={menuItems} session={session} profile={profile}/>}
           {nav==="morning" && <MorningTasks closed={closed} returns={returns} tasks={tasks} setTasks={setTasks} session={session} profile={profile}/>}
