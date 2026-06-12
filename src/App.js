@@ -1871,7 +1871,7 @@ function KnowledgeBase({ session, profile }) {
     setDocs(p => p.filter(d => d.id !== doc.id));
   };
 
-  const fileIcons = { pdf: "📄", doc: "📝", docx: "📝", xlsx: "📊", xls: "📊", ppt: "📋", pptx: "📋", jpg: "🖼", jpeg: "🖼", png: "🖼", mp4: "🎬", mov: "🎬" };
+  const fileIcons = { pdf: "📄", doc: "📝", docx: "📝", xlsx: "📊", xls: "📊", ppt: "📋", pptx: "📋", jpg: "🖼", jpeg: "🖼", png: "🖼", mp4: "🎬", mov: "🎬", pages: "📝", numbers: "📊", key: "📋" };
   const catColors = { "נהלים": "badge-info", "הכשרה": "badge-success", "תפריט": "badge-warn", "בטיחות": "badge-danger", "אחר": "badge-neu" };
 
   const filtered = filter === "הכל" ? docs : docs.filter(d => d.category === filter);
@@ -1908,7 +1908,7 @@ function KnowledgeBase({ session, profile }) {
             <div className="fg">
               <label className="fl">קובץ (אופציונלי)</label>
               <input type="file" id="kb-file" style={{display:"none"}} onChange={e => setFile(e.target.files[0])}
-                accept=".pdf,.doc,.docx,.xlsx,.xls,.ppt,.pptx,.jpg,.jpeg,.png,.mp4,.mov"/>
+                accept=".pdf,.doc,.docx,.xlsx,.xls,.ppt,.pptx,.jpg,.jpeg,.png,.mp4,.mov,.pages,.numbers,.key"/>
               <label htmlFor="kb-file" style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"var(--card)",border:"1px dashed var(--brs)",borderRadius:"var(--r)",cursor:"pointer",color:"var(--ts)",fontSize:14}}>
                 📎 {file ? file.name : "בחר קובץ — PDF, Word, Excel, תמונה, וידאו"}
               </label>
