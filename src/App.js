@@ -1557,6 +1557,8 @@ function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, p
   const [tab, setTab] = useState("today");
   const [reports, setReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(false);
+  const [localDayOpen, setLocalDayOpen] = useState(false);
+  const [checkingDay, setCheckingDay] = useState(true);
 
   const todayStr = new Date().toISOString().slice(0,10);
   const closedToday = closed.filter(d => d.closed_at?.startsWith(todayStr));
@@ -1570,6 +1572,27 @@ function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, p
   const reaC = {};
   returnsToday.forEach(r => { reaC[r.reason] = (reaC[r.reason]||0)+1; });
   const topReasons = Object.entries(reaC).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+  // בדוק סטטוס יום ישירות מ-Supabase
+  useEffect(() => {
+    const checkDay = async () => {
+      setCheckingDay(true);
+      const todayStr = new Date().toISOString().slice(0,10);
+      const data = await sb.query("day_status", {
+        restaurant_id: `eq.${RESTAURANT_ID}`,
+        status_date: `eq.${todayStr}`,
+        select: "*",
+      }, session.access_token);
+      if (Array.isArray(data) && data.length > 0) {
+        setLocalDayOpen(data[0].is_open === true);
+        if (data[0].is_open === false) setClosedDay(true);
+      } else {
+        setLocalDayOpen(false);
+      }
+      setCheckingDay(false);
+    };
+    checkDay();
+  }, []);
 
   const loadReports = async () => {
     setLoadingReports(true);
@@ -1658,9 +1681,16 @@ function DailySummary({ closed, returns, setReturns, tasks, setTasks, session, p
           tasksDone={tasksDone}
           tasksTotal={tasksTotal}
           onConfirm={closeDay}
-          isDayOpen={isDayOpen}
+          isDayOpen={localDayOpen}
         />
       </div>
+
+      {!checkingDay && !localDayOpen && !closedDay && (
+        <div className="alert warn" style={{marginBottom:16}}>
+          <div style={{fontSize:14,fontWeight:600,color:"var(--warn)"}}>היום לא נפתח עדיין</div>
+          <div style={{fontSize:12,color:"var(--ts)",marginTop:2}}>כדי לסגור יום — יש לפתוח אותו קודם מה-Dashboard</div>
+        </div>
+      )}
 
       <div className="tabs">
         <div className={`tab ${tab==="today"?"active":""}`} onClick={()=>setTab("today")}>היום</div>
